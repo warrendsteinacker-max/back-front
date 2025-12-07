@@ -4,15 +4,17 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "start": "node server.js"
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lowdb/node": "^2.0.0",
     "cors": "^2.8.5",
-    "express": "^5.2.1",
-    "lowdb": "^7.0.1",
+    "express": "^4.18.2",
+    "lowdb": "^6.0.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

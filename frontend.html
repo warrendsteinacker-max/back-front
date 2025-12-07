@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modular API Client</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for better aesthetics */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc;
+        }
+        .panel {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
+        }
+        .btn-action {
+            transition: background-color 0.2s;
+        }
+        .input-field {
+            border: 1px solid #d1d5db;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .header {
+            background-color: #1e3a8a;
+            color: white;
+            padding: 1rem;
+            border-radius: 0.5rem 0.5rem 0 0;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-extrabold text-center text-blue-900 mb-8">
+            Node.js Modular API Client
+        </h1>
+        <p class="text-center text-sm text-red-600 font-semibold mb-6 p-3 bg-red-100 rounded-lg">
+            ⚠️ **CRITICAL:** Ensure your Node.js server is running on **http://localhost:3000** to enable API functionality.
+        </p>
+
+        <!-- Main Grid Layout: Two separate panels -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <!-- ITEM MANAGEMENT PANEL (db.json) -->
+            <div class="panel bg-white p-6 rounded-xl border border-gray-200">
+                <div class="header">
+                    <h2 class="text-2xl font-bold">📦 Item Management (`/api/items`)</h2>
+                </div>
+
+                <!-- Create/Update Form -->
+                <form id="itemForm" class="mt-6 space-y-4 border-b pb-4 mb-4">
+                    <input type="hidden" id="item_id_to_update">
+                    
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <input type="text" id="itemName" placeholder="Item Name (e.g., Laptop)" required 
+                            class="input-field w-full" aria-label="Item Name">
+                        <input type="number" id="itemValue" placeholder="Value (e.g., 1200)" required 
+                            class="input-field w-full" aria-label="Item Value">
+                    </div>
+                    
+                    <button type="submit" id="itemSubmitBtn" 
+                        class="btn-action w-full py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-md">
+                        Add New Item
+                    </button>
+                </form>
+
+                <!-- Item List -->
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-700">Current Items</h3>
+                    <button onclick="fetchItems()" class="text-blue-500 hover:text-blue-700 font-medium">Refresh</button>
+                </div>
+                <ul id="itemList" class="space-y-2">
+                    <li class="text-gray-500">Loading items...</li>
+                </ul>
+            </div>
+
+            <!-- USER MANAGEMENT PANEL (users.json) -->
+            <div class="panel bg-white p-6 rounded-xl border border-gray-200">
+                <div class="header bg-purple-700">
+                    <h2 class="text-2xl font-bold">👤 User Management (`/api/users`)</h2>
+                </div>
+
+                <!-- Create/Update Form -->
+                <form id="userForm" class="mt-6 space-y-4 border-b pb-4 mb-4">
+                    <input type="hidden" id="user_id_to_update">
+                    
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <input type="text" id="userName" placeholder="Username (e.g., jane_doe)" required 
+                            class="input-field w-full" aria-label="User Name">
+                        <input type="email" id="userEmail" placeholder="Email (e.g., jane@test.com)" required 
+                            class="input-field w-full" aria-label="User Email">
+                    </div>
+
+                    <button type="submit" id="userSubmitBtn" 
+                        class="btn-action w-full py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-md">
+                        Add New User
+                    </button>
+                </form>
+
+                <!-- User List -->
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-700">Registered Users</h3>
+                    <button onclick="fetchUsers()" class="text-purple-500 hover:text-purple-700 font-medium">Refresh</button>
+                </div>
+                <ul id="userList" class="space-y-2">
+                    <li class="text-gray-500">Loading users...</li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        const API_BASE_URL = 'http://localhost:3000/api';
+
+        // --- GENERAL UI HELPERS ---
+
+        /**
+         * Creates a simple modal/toast message for user feedback.
+         */
+        function showMessage(message, type = 'success') {
+            const container = document.createElement('div');
+            container.className = `fixed bottom-4 right-4 p-4 rounded-lg text-white shadow-xl z-50 
+                                   ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}`;
+            container.textContent = message;
+            document.body.appendChild(container);
+            setTimeout(() => container.remove(), 3000);
+        }
+
+        /**
+         * Generic function to handle API fetch requests.
+         */
+        async function apiFetch(endpoint, method = 'GET', data = null) {
+            const url = `${API_BASE_URL}/${endpoint}`;
+            const options = {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+            };
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
+            try {
+                const response = await fetch(url, options);
+                
+                if (response.status === 204) { // No Content (Successful DELETE)
+                    return null;
+                }
+                
+                const result = await response.json();
+
+                if (!response.ok) {
+                    // Throw error with server message if available
+                    throw new Error(result.message || `API Error: ${response.status}`);
+                }
+                return result;
+
+            } catch (error) {
+                console.error(`Fetch error for ${method} ${url}:`, error);
+                showMessage(error.message || `Could not connect to the API.`, 'error');
+                throw error;
+            }
+        }
+
+        // --- ITEM CRUD LOGIC ---
+
+        async function fetchItems() {
+            const itemList = document.getElementById('itemList');
+            itemList.innerHTML = '<li class="text-yellow-600">Fetching items...</li>';
+            try {
+                const items = await apiFetch('items');
+                renderItems(items);
+            } catch (e) {
+                itemList.innerHTML = '<li class="text-red-500">Failed to load items. Check server status.</li>';
+            }
+        }
+
+        function renderItems(items) {
+            const itemList = document.getElementById('itemList');
+            if (items.length === 0) {
+                itemList.innerHTML = '<li class="text-gray-500">No items found. Add one above!</li>';
+                return;
+            }
+
+            itemList.innerHTML = items.map(item => `
+                <li class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border">
+                    <div>
+                        <span class="font-bold text-gray-800">${item.name}</span>
+                        <span class="text-sm text-gray-500 ml-2"> (ID: ${item.id})</span>
+                        <span class="block text-blue-600 font-medium">$${item.value}</span>
+                    </div>
+                    <div class="space-x-2">
+                        <button onclick="editItem(${item.id}, '${item.name}', ${item.value})" 
+                                class="text-sm py-1 px-3 bg-blue-500 hover:bg-blue-600 text-white rounded-md">
+                            Edit
+                        </button>
+                        <button onclick="deleteItemHandler(${item.id})" 
+                                class="text-sm py-1 px-3 bg-red-500 hover:bg-red-600 text-white rounded-md">
+                            Delete
+                        </button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function editItem(id, name, value) {
+            document.getElementById('item_id_to_update').value = id;
+            document.getElementById('itemName').value = name;
+            document.getElementById('itemValue').value = value;
+            document.getElementById('itemSubmitBtn').textContent = `Update Item (ID: ${id})`;
+            document.getElementById('itemSubmitBtn').classList.remove('bg-green-600');
+            document.getElementById('itemSubmitBtn').classList.add('bg-blue-600');
+            showMessage(`Editing Item ID ${id}`, 'info');
+        }
+
+        async function deleteItemHandler(id) {
+            if (!confirm(`Are you sure you want to delete Item ID ${id}?`)) return;
+            try {
+                await apiFetch(`items/${id}`, 'DELETE');
+                showMessage(`Item ID ${id} deleted successfully.`);
+                fetchItems();
+            } catch (e) {
+                // Error already shown in apiFetch
+            }
+        }
+
+        // --- USER CRUD LOGIC ---
+
+        async function fetchUsers() {
+            const userList = document.getElementById('userList');
+            userList.innerHTML = '<li class="text-yellow-600">Fetching users...</li>';
+            try {
+                const users = await apiFetch('users');
+                renderUsers(users);
+            } catch (e) {
+                userList.innerHTML = '<li class="text-red-500">Failed to load users. Check server status.</li>';
+            }
+        }
+
+        function renderUsers(users) {
+            const userList = document.getElementById('userList');
+            if (users.length === 0) {
+                userList.innerHTML = '<li class="text-gray-500">No users found. Add one above!</li>';
+                return;
+            }
+
+            userList.innerHTML = users.map(user => `
+                <li class="flex justify-between items-center p-3 bg-gray-50 rounded-lg border">
+                    <div>
+                        <span class="font-bold text-gray-800">${user.username}</span>
+                        <span class="text-sm text-gray-500 ml-2"> (ID: ${user.id})</span>
+                        <span class="block text-purple-600 font-medium">${user.email}</span>
+                    </div>
+                    <div class="space-x-2">
+                        <button onclick="editUser(${user.id}, '${user.username}', '${user.email}')" 
+                                class="text-sm py-1 px-3 bg-blue-500 hover:bg-blue-600 text-white rounded-md">
+                            Edit
+                        </button>
+                        <button onclick="deleteUserHandler(${user.id})" 
+                                class="text-sm py-1 px-3 bg-red-500 hover:bg-red-600 text-white rounded-md">
+                            Delete
+                        </button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function editUser(id, username, email) {
+            document.getElementById('user_id_to_update').value = id;
+            document.getElementById('userName').value = username;
+            document.getElementById('userEmail').value = email;
+            document.getElementById('userSubmitBtn').textContent = `Update User (ID: ${id})`;
+            document.getElementById('userSubmitBtn').classList.remove('bg-purple-600');
+            document.getElementById('userSubmitBtn').classList.add('bg-blue-600');
+            showMessage(`Editing User ID ${id}`, 'info');
+        }
+
+        async function deleteUserHandler(id) {
+            if (!confirm(`Are you sure you want to delete User ID ${id}?`)) return;
+            try {
+                await apiFetch(`users/${id}`, 'DELETE');
+                showMessage(`User ID ${id} deleted successfully.`);
+                fetchUsers();
+            } catch (e) {
+                // Error already shown in apiFetch
+            }
+        }
+
+
+        // --- EVENT LISTENERS (Form Submissions) ---
+
+        document.getElementById('itemForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('item_id_to_update').value;
+            const name = document.getElementById('itemName').value;
+            const value = document.getElementById('itemValue').value;
+            
+            const data = { name, value: parseInt(value) };
+            
+            try {
+                if (id) {
+                    // PUT (Update) operation
+                    await apiFetch(`items/${id}`, 'PUT', data);
+                    showMessage(`Item ID ${id} updated.`);
+                } else {
+                    // POST (Create) operation
+                    await apiFetch('items', 'POST', data);
+                    showMessage(`New item added.`);
+                }
+                
+                // Clear form and reset button
+                document.getElementById('itemForm').reset();
+                document.getElementById('item_id_to_update').value = '';
+                document.getElementById('itemSubmitBtn').textContent = 'Add New Item';
+                document.getElementById('itemSubmitBtn').classList.remove('bg-blue-600');
+                document.getElementById('itemSubmitBtn').classList.add('bg-green-600');
+
+                fetchItems();
+            } catch (e) {
+                // Error already handled
+            }
+        });
+
+        document.getElementById('userForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('user_id_to_update').value;
+            const username = document.getElementById('userName').value;
+            const email = document.getElementById('userEmail').value;
+            
+            const data = { username, email };
+            
+            try {
+                if (id) {
+                    // PUT (Update) operation
+                    await apiFetch(`users/${id}`, 'PUT', data);
+                    showMessage(`User ID ${id} updated.`);
+                } else {
+                    // POST (Create) operation
+                    await apiFetch('users', 'POST', data);
+                    showMessage(`New user added.`);
+                }
+                
+                // Clear form and reset button
+                document.getElementById('userForm').reset();
+                document.getElementById('user_id_to_update').value = '';
+                document.getElementById('userSubmitBtn').textContent = 'Add New User';
+                document.getElementById('userSubmitBtn').classList.remove('bg-blue-600');
+                document.getElementById('userSubmitBtn').classList.add('bg-purple-600');
+
+                fetchUsers();
+            } catch (e) {
+                // Error already handled
+            }
+        });
+
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            fetchItems();
+            fetchUsers();
+        };
+    </script>
+</body>
+</html>
