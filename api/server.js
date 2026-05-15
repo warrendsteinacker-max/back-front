@@ -15,7 +15,7 @@ const connectDB = async () => {
   if (mongoose.connections[0].readyState) return;
   await mongoose.connect(process.env.MONGODB_URI);
 };
-//////////
+///////////////
 export default async function handler(req, res) {
   // 1. Handle CORS manually for Electron
   res.setHeader('Access-Control-Allow-Origin', '*');
