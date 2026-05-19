@@ -10,9 +10,9 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   email: { type: String, required: true }, 
   pushSubscription: { type: Object, default: null } 
-}, { collection: 'User' });
+});
 
-const User = mongoose.models.User || mongoose.model('User', userSchema);
+const User = mongoose.models.User || mongoose.model('users', userSchema);
 
 const connectDB = async () => {
   if (mongoose.connections[0].readyState) return;
