@@ -52,7 +52,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const { username, password, email, type, pushSubscription, notificationPayload } = req.body;
-
+///
     try {
       // REGISTER NEW ACCOUNT WITH EMAIL
       if (type === 'register') {
