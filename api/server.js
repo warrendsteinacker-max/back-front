@@ -80,8 +80,7 @@ export default async function handler(req, res) {
             process.env.VAPID_PRIVATE_KEY || ''
           );
         } catch (vapidErr) {
-          console.error("WebPush initialization failed:", vapidErr.message);
-          return res.status(500).json({ error: "Server WebPush configuration missing keys." });
+          return res.status(500).json({ error: "Server WebPush configuration missing keys.", details: vapidErr.message });
         }
 
         // Safe contextual initialization for Nodemailer
@@ -95,15 +94,22 @@ export default async function handler(req, res) {
           },
         });
 
-        const users = await User.find({}).select('email pushSubscription');
+        // Fetch all users
+        const users = await User.find({}).select('email pushSubscription username');
         
-        // 🔍 DEBUGGING LOGS FOR DATABASE INSPECTION
-        console.log("--- DEBUGGING EMAIL BROADCAST ---");
-        console.log("Total users found in DB:", users.length);
-        console.log("Users array content:", JSON.stringify(users));
-        
+        // Track the success/failure of every single operation to return to Postman
+        const dispatchResults = {
+          totalUsersInDatabase: users.length,
+          pushDispatches: [],
+          emailDispatches: []
+        };
+
         if (users.length === 0) {
-          return res.status(200).json({ message: 'No users found to notify.' });
+          return res.status(200).json({ 
+            success: false, 
+            message: 'No users found in the database collection.',
+            dispatchResults 
+          });
         }
 
         const titleText = notificationPayload?.title || 'System Alert';
@@ -113,17 +119,24 @@ export default async function handler(req, res) {
         const notificationPromises = [];
 
         users.forEach(user => {
+          // Handle Push Subscriptions
           if (user.pushSubscription) {
             const pushPromise = webpush.sendNotification(user.pushSubscription, payload)
+              .then(() => {
+                dispatchResults.pushDispatches.push({ username: user.username, status: "Success" });
+              })
               .catch(async (err) => {
                 if (err.statusCode === 410 || err.statusCode === 404) {
                   await User.findByIdAndUpdate(user._id, { pushSubscription: null });
                 }
-                console.error(`Push failed for user ${user._id}:`, err.message);
+                dispatchResults.pushDispatches.push({ username: user.username, status: "Failed", error: err.message });
               });
             notificationPromises.push(pushPromise);
+          } else {
+            dispatchResults.pushDispatches.push({ username: user.username, status: "Skipped", reason: "No push subscription saved" });
           }
 
+          // Handle Emails
           if (user.email) {
             const emailPromise = transporter.sendMail({
               from: `"Server Notification" <${process.env.EMAIL_USER}>`,
@@ -131,15 +144,27 @@ export default async function handler(req, res) {
               subject: titleText,
               text: bodyText,
               html: `<p><strong>${titleText}</strong></p><p>${bodyText}</p>`
-            }).catch(err => {
-              console.error(`Email failed to send to ${user.email}:`, err.message);
+            })
+            .then((info) => {
+              dispatchResults.emailDispatches.push({ email: user.email, status: "Success", messageId: info.messageId });
+            })
+            .catch(err => {
+              dispatchResults.emailDispatches.push({ email: user.email, status: "Failed", error: err.message });
             });
             notificationPromises.push(emailPromise);
+          } else {
+            dispatchResults.emailDispatches.push({ username: user.username, status: "Skipped", reason: "No email address found" });
           }
         });
 
+        // Wait for all push alerts and emails to complete their attempts
         await Promise.allSettled(notificationPromises);
-        return res.status(200).json({ success: true, message: 'Dispatched push and email notifications to all users.' });
+        
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Notification batch processed completely.', 
+          dispatchResults 
+        });
       }
 
     } catch (error) {
