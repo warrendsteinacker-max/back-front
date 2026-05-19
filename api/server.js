@@ -1,6 +1,3 @@
-
-/////Still have to figure out how to config amny emails into this
-////
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
@@ -14,7 +11,7 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY
 );
 
-// Add this block right below webpush.setVapidDetails(...)
+// Configure Nodemailer with your Vercel Gmail variables
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,       // e.g., smtp.gmail.com
   port: parseInt(process.env.EMAIL_PORT || '465'), 
@@ -29,7 +26,7 @@ const transporter = nodemailer.createTransport({
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  email: { type: String, required: true }, // <-- ADD THIS LINE
+  email: { type: String, required: true }, 
   pushSubscription: { type: Object, default: null } 
 });
 
@@ -48,11 +45,19 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
+  // Bypasses everything to test if your deployment is active and updating
+  if (req.method === 'POST' && req.body.type === 'ping') {
+    return res.status(200).json({ 
+      status: "Success!", 
+      message: "Your Vercel server is alive and communicating perfectly!" 
+    });
+  }
+
   await connectDB();
 
   if (req.method === 'POST') {
     const { username, password, email, type, pushSubscription, notificationPayload } = req.body;
-///
+
     try {
       // REGISTER NEW ACCOUNT WITH EMAIL
       if (type === 'register') {
@@ -102,9 +107,9 @@ export default async function handler(req, res) {
           if (user.pushSubscription) {
             const pushPromise = webpush.sendNotification(user.pushSubscription, payload)
               .catch(async (err) => {
+                // Safe standalone database correction call
                 if (err.statusCode === 410 || err.statusCode === 404) {
-                  user.pushSubscription = null;
-                  await user.save();
+                  await User.findByIdAndUpdate(user._id, { pushSubscription: null });
                 }
                 console.error(`Push failed for user ${user._id}:`, err.message);
               });
@@ -135,7 +140,7 @@ export default async function handler(req, res) {
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }
-  } // Closes the POST route block safely
+  } 
 
   res.status(405).send('Method Not Allowed');
 }
