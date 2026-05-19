@@ -97,6 +97,11 @@ export default async function handler(req, res) {
 
         const users = await User.find({}).select('email pushSubscription');
         
+        // 🔍 DEBUGGING LOGS FOR DATABASE INSPECTION
+        console.log("--- DEBUGGING EMAIL BROADCAST ---");
+        console.log("Total users found in DB:", users.length);
+        console.log("Users array content:", JSON.stringify(users));
+        
         if (users.length === 0) {
           return res.status(200).json({ message: 'No users found to notify.' });
         }
