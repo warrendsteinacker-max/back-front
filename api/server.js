@@ -45,21 +45,23 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Bypasses everything to test if your deployment is active and updating
-  if (req.method === 'POST' && req.body.type === 'ping') {
+  // 1. Check for ping test immediately without touching MongoDB
+  if (req.method === 'POST' && req.body?.type === 'ping') {
     return res.status(200).json({ 
       status: "Success!", 
       message: "Your Vercel server is alive and communicating perfectly!" 
     });
   }
 
-  await connectDB();
-
+  // 2. Only handle POST requests for database actions
   if (req.method === 'POST') {
-    const { username, password, email, type, pushSubscription, notificationPayload } = req.body;
-
     try {
-      // REGISTER NEW ACCOUNT WITH EMAIL
+      // Safely connect to DB only when a valid POST arrives
+      await connectDB();
+
+      const { username, password, email, type, pushSubscription, notificationPayload } = req.body;
+
+      // REGISTER NEW ACCOUNT
       if (type === 'register') {
         const hashedPassword = await bcrypt.hash(password, 10);
         await User.create({ username, email, password: hashedPassword, pushSubscription: pushSubscription || null });
@@ -88,7 +90,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ token, success: true });
       }
 
-      // BROADCAST PUSH AND EMAIL NOTIFICATIONS SIMULTANEOUSLY
+      // BROADCAST PUSH AND EMAIL NOTIFICATIONS
       if (type === 'sendNotification') {
         const users = await User.find({}).select('email pushSubscription');
         
@@ -103,11 +105,9 @@ export default async function handler(req, res) {
         const notificationPromises = [];
 
         users.forEach(user => {
-          // Process Browser Push
           if (user.pushSubscription) {
             const pushPromise = webpush.sendNotification(user.pushSubscription, payload)
               .catch(async (err) => {
-                // Safe standalone database correction call
                 if (err.statusCode === 410 || err.statusCode === 404) {
                   await User.findByIdAndUpdate(user._id, { pushSubscription: null });
                 }
@@ -116,7 +116,6 @@ export default async function handler(req, res) {
             notificationPromises.push(pushPromise);
           }
 
-          // Process Email Notification
           if (user.email) {
             const emailPromise = transporter.sendMail({
               from: `"Server Notification" <${process.env.EMAIL_USER}>`,
@@ -131,20 +130,18 @@ export default async function handler(req, res) {
           }
         });
 
-        // Resolve all requests in parallel so Vercel doesn't hit execution timeouts
         await Promise.allSettled(notificationPromises);
-        
         return res.status(200).json({ success: true, message: 'Dispatched push and email notifications to all users.' });
       }
 
     } catch (error) {
       return res.status(500).json({ error: error.message });
     }
-  } 
-
-  res.status(405).send('Method Not Allowed');
+  } else {
+    // Automatically drops all browser GET spams cleanly with a 405 without throwing errors
+    return res.status(405).send('Method Not Allowed');
+  }
 }
-
 
 
 
