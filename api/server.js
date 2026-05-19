@@ -4,25 +4,7 @@ import bcrypt from 'bcryptjs';
 import webpush from 'web-push';
 import nodemailer from 'nodemailer';
 
-// 1. Configure Web Push with your free VAPID keys
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT || 'mailto:test@example.com',
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
-
-// Configure Nodemailer with your Vercel Gmail variables
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,       // e.g., smtp.gmail.com
-  port: parseInt(process.env.EMAIL_PORT || '465'), 
-  secure: process.env.EMAIL_SECURE === 'true',     
-  auth: {
-    user: process.env.EMAIL_USER,     // Your system sending email
-    pass: process.env.EMAIL_PASS,     // Your system email app password
-  },
-});
-
-// 2. Updated User Schema to hold the native browser subscription object
+// 1. User Schema configuration
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -45,7 +27,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // 1. Check for ping test immediately without touching MongoDB
+  // Test the ping route completely isolated from configurations
   if (req.method === 'POST' && req.body?.type === 'ping') {
     return res.status(200).json({ 
       status: "Success!", 
@@ -53,15 +35,13 @@ export default async function handler(req, res) {
     });
   }
 
-  // 2. Only handle POST requests for database actions
   if (req.method === 'POST') {
     try {
-      // Safely connect to DB only when a valid POST arrives
       await connectDB();
 
       const { username, password, email, type, pushSubscription, notificationPayload } = req.body;
 
-      // REGISTER NEW ACCOUNT
+      // REGISTER ROUTE
       if (type === 'register') {
         const hashedPassword = await bcrypt.hash(password, 10);
         await User.create({ username, email, password: hashedPassword, pushSubscription: pushSubscription || null });
@@ -90,8 +70,31 @@ export default async function handler(req, res) {
         return res.status(200).json({ token, success: true });
       }
 
-      // BROADCAST PUSH AND EMAIL NOTIFICATIONS
+      // BROADCAST NOTIFICATIONS
       if (type === 'sendNotification') {
+        // Safe contextual initialization for Web Push
+        try {
+          webpush.setVapidDetails(
+            process.env.VAPID_SUBJECT || 'mailto:test@example.com',
+            process.env.VAPID_PUBLIC_KEY || '',
+            process.env.VAPID_PRIVATE_KEY || ''
+          );
+        } catch (vapidErr) {
+          console.error("WebPush initialization failed:", vapidErr.message);
+          return res.status(500).json({ error: "Server WebPush configuration missing keys." });
+        }
+
+        // Safe contextual initialization for Nodemailer
+        const transporter = nodemailer.createTransport({
+          host: process.env.EMAIL_HOST,       
+          port: parseInt(process.env.EMAIL_PORT || '465'), 
+          secure: process.env.EMAIL_SECURE === 'true',     
+          auth: {
+            user: process.env.EMAIL_USER,     
+            pass: process.env.EMAIL_PASS,     
+          },
+        });
+
         const users = await User.find({}).select('email pushSubscription');
         
         if (users.length === 0) {
@@ -138,7 +141,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: error.message });
     }
   } else {
-    // Automatically drops all browser GET spams cleanly with a 405 without throwing errors
     return res.status(405).send('Method Not Allowed');
   }
 }
