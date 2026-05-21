@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs';
 import webpush from 'web-push';
 import nodemailer from 'nodemailer';
 
+// ⚙️ CONTROLLER VARIABLE: Set to true to auto-create the user, or false to disable it.
+const AUTO_SEED_FIRST_USER = true;
+
 // 1. User Schema configuration
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
@@ -12,11 +15,37 @@ const userSchema = new mongoose.Schema({
   pushSubscription: { type: Object, default: null } 
 });
 
-const User = mongoose.models.User || mongoose.model('users', userSchema);
+// Force the model to strictly look at the exact collection name in your Atlas database
+const User = mongoose.models.User || mongoose.model('users', userSchema, 'users');
 
 const connectDB = async () => {
   if (mongoose.connections[0].readyState) return;
   await mongoose.connect(process.env.MONGODB_URI);
+};
+
+// 🚀 Automatic Seeder Function
+const seedFirstUserIfNeeded = async () => {
+  if (!AUTO_SEED_FIRST_USER) return;
+
+  try {
+    const userExists = await User.findOne({ username: 'warren' });
+    
+    if (!userExists) {
+      console.log("First user 'warren' not found. Seeding record now...");
+      
+      await User.create({
+        username: 'warren',
+        email: 'warrendsteinacker@gmail.com',
+        // Injects the exact hash from your MongoDB UI screenshot
+        password: '$2a$10$X7b9M2K6WvY7R8q2E1U8O.eX6z6fI3vE4y5U6t7o8p9q0r1s2t3u4', 
+        pushSubscription: null
+      });
+      
+      console.log("First user successfully seeded!");
+    }
+  } catch (err) {
+    console.error("Automatic user seeding failed:", err.message);
+  }
 };
 
 ///////////////
@@ -38,6 +67,9 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       await connectDB();
+      
+      // Runs the check immediately after connecting to your database cluster
+      await seedFirstUserIfNeeded();
 
       const { username, password, email, type, pushSubscription, notificationPayload } = req.body;
 
