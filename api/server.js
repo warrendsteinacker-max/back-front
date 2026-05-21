@@ -45,7 +45,8 @@ const seedFirstUserIfNeeded = async () => {
       
       await User.create({
         username: 'sandy',
-        email: 'graceandstar@gmail.com',
+        email: 'warrendsteinacker@gmail.com',
+        // email: 'graceandstar@gmail.com',
         // Injects the exact hash from your MongoDB UI screenshot
         password: 'Z2a$10$X7b9M2K6WvY7R8q2E1U8O.eX6z6fI3vE4y5U6t7o8p9q0r1s2t3u4', 
         pushSubscription: null
