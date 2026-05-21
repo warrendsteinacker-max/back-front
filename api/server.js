@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       message: "Your Vercel server is alive and communicating perfectly!" 
     });
   }
-//////////
+///////////////
   if (req.method === 'POST') {
     try {
       await connectDB();
