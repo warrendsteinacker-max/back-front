@@ -38,16 +38,16 @@ const seedFirstUserIfNeeded = async () => {
   if (!AUTO_SEED_FIRST_USER) return;
 
   try {
-    const userExists = await User.findOne({ username: 'warren' });
+    const userExists = await User.findOne({ username: 'sandy' });
     
     if (!userExists) {
-      console.log("First user 'warren' not found. Seeding record now...");
+      console.log("First user 'sandy' not found. Seeding record now...");
       
       await User.create({
-        username: 'warren',
-        email: 'warrendsteinacker@gmail.com',
+        username: 'sandy',
+        email: 'graceandstar@gmail.com',
         // Injects the exact hash from your MongoDB UI screenshot
-        password: '$2a$10$X7b9M2K6WvY7R8q2E1U8O.eX6z6fI3vE4y5U6t7o8p9q0r1s2t3u4', 
+        password: 'Z2a$10$X7b9M2K6WvY7R8q2E1U8O.eX6z6fI3vE4y5U6t7o8p9q0r1s2t3u4', 
         pushSubscription: null
       });
       
