@@ -7,12 +7,22 @@ import nodemailer from 'nodemailer';
 // ⚙️ CONTROLLER VARIABLE: Set to true to auto-create the user, or false to disable it.
 const AUTO_SEED_FIRST_USER = true;
 
-// 1. User Schema configuration
+// 1. Nested Push Subscription Schema Configuration
+const pushSubscriptionSchema = new mongoose.Schema({
+  endpoint: { type: String, required: true },
+  expirationTime: { type: Number, default: null },
+  keys: {
+    p256dh: { type: String, required: true },
+    auth: { type: String, required: true }
+  }
+}, { _id: false }); // Prevents Mongoose from generating an unnecessary nested _id field
+
+// 2. Main User Schema Configuration
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   email: { type: String, required: true }, 
-  pushSubscription: { type: Object, default: null } 
+  pushSubscription: { type: pushSubscriptionSchema, default: null } // Uses the strict layout
 });
 
 // Force the model to strictly look at the exact collection name in your Atlas database
@@ -63,7 +73,7 @@ export default async function handler(req, res) {
       message: "Your Vercel server is alive and communicating perfectly!" 
     });
   }
-///////////////
+
   if (req.method === 'POST') {
     try {
       await connectDB();
@@ -168,14 +178,20 @@ export default async function handler(req, res) {
             dispatchResults.pushDispatches.push({ username: user.username, status: "Skipped", reason: "No push subscription saved" });
           }
 
-          // Handle Emails
+          // Handle Emails with Ultimate Priority Flags
           if (user.email) {
             const emailPromise = transporter.sendMail({
               from: `"Server Notification" <${process.env.EMAIL_USER}>`,
               to: user.email,
               subject: titleText,
               text: bodyText,
-              html: `<p><strong>${titleText}</strong></p><p>${bodyText}</p>`
+              html: `<p><strong>${titleText}</strong></p><p>${bodyText}</p>`,
+              priority: 'high', 
+              headers: {
+                'X-Priority': '1',          
+                'X-MSMail-Priority': 'High', 
+                'Importance': 'high'         
+              }
             })
             .then((info) => {
               dispatchResults.emailDispatches.push({ email: user.email, status: "Success", messageId: info.messageId });
