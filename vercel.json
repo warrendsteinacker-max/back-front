@@ -10,12 +10,12 @@
     {
       "src": "/api/notification",
       "methods": ["POST", "OPTIONS"],
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      },
-      "dest": "api/server.js"
+      "dest": "/api/server.js"
+    },
+    {
+      "src": "/api/server",
+      "methods": ["POST", "OPTIONS"],
+      "dest": "/api/server.js"
     }
   ]
 }

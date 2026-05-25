@@ -292,9 +292,15 @@ export default async function handler(req, res) {
 
 
 
+/////json body for email
 
-
-
+// {
+//   "type": "sendNotification",
+//   "notificationPayload": {
+//     "title": "Postman Test Alert",
+//     "body": "Testing the unified Vercel script."
+//   }
+// }
 
 
 
