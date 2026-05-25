@@ -41,7 +41,7 @@ const connectDB = async () => {
   if (mongoose.connections[0].readyState) return;
   await mongoose.connect(process.env.MONGODB_URI);
 };
-
+////
 const seedFirstUserIfNeeded = async () => {
   if (!AUTO_SEED_FIRST_USER) return;
   try {
