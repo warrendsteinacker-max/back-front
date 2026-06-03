@@ -3,13 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Barcode Scanner App</title>
+    <!-- Include the HTML5-QRCode Library via CDN -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f9;
+        }
+        #reader {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #result-container {
+            margin-top: 20px;
+            width: 100%;
+            max-width: 500px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 5px solid #007bff;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .log-entry {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            word-break: break-all;
+        }
+    </style>
 </head>
 <body>
+
+    <h1>Barcode Scanner</h1>
     
+    <!-- The container where the camera video stream will render -->
+    <div id="reader"></div>
+
+    <!-- The container where scanned contents will be logged -->
+    <div id="result-container">
+        <h3>Scanned Log:</h3>
+        <div id="scanned-results">No barcodes scanned yet.</div>
+    </div>
+
+    <script>
+        // Array to keep track of scanned barcodes in global state
+        const scanLog = [];
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // Handle the scanned code here
+            console.log(`Code matched = ${decodedText}`, decodedResult);
+            
+            const resultsDiv = document.getElementById('scanned-results');
+            
+            // Clear the placeholder if it's the first scan
+            if (scanLog.length === 0) {
+                resultsDiv.innerHTML = '';
+            }
+
+            // Add the new barcode data to our log array
+            // formats can include EAN_13, CODE_128, QR_CODE, etc.
+            const formatName = decodedResult.result.format.formatName;
+            const logMessage = `[${new Date().toLocaleTimeString()}] Found ${formatName}: <strong>${decodedText}</strong>`;
+            
+            scanLog.unshift(logMessage); // Add new logs to the top
+
+            // Render log entries to the UI
+            resultsDiv.innerHTML = scanLog.map(entry => `<div class="log-entry">${entry}</div>`).join('');
+            
+            // OPTIONAL: If the scanned barcode text is a URL, you can redirect or fetch data from it
+            /*
+            if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+                window.open(decodedText, '_blank');
+            }
+            */
+        }
+
+        function onScanFailure(error) {
+            // This callback fires constantly while scanning looking for codes
+            // You usually want to leave this silent to avoid flooding the console
+        }
+
+        // Initialize the scanner when the DOM content is ready
+        document.addEventListener("DOMContentLoaded", () => {
+            let html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", 
+                { 
+                    fps: 10,               // Scans 10 frames per second
+                    qrbox: { width: 250, height: 150 }, // UI scanning box dimensions for barcodes
+                    rememberLastUsedCamera: true
+                },
+                /* verbose= */ false
+            );
+            
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        });
+    </script>
 </body>
 </html>
-
-
-
-///////////
