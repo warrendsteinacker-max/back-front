@@ -1,266 +1,387 @@
-import mongoose from 'mongoose';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import webpush from 'web-push';
-import nodemailer from 'nodemailer';
 
-// ⚙️ CONTROLLER VARIABLE: Set to true to auto-create the seed user, or false to disable it.
-const AUTO_SEED_FIRST_USER = true;
 
-// 1. New Website Schema Configuration (Tracks authorized sites in your database account)
-const websiteSchema = new mongoose.Schema({
-  url: { type: String, required: true, unique: true } // Stores the unique registered domain names
-});
 
-const Website = mongoose.models.Website || mongoose.model('websites', websiteSchema, 'websites');
 
-// 2. Nested Push Subscription Schema Configuration
-const pushSubscriptionSchema = new mongoose.Schema({
-  endpoint: { type: String, required: true },
-  expirationTime: { type: Number, default: null },
-  keys: {
-    p256dh: { type: String, required: true },
-    auth: { type: String, required: true }
+
+
+
+
+
+
+// api for scanning barcodes
+
+
+// api/server.js
+
+// CORS configuration middleware wrapper for Vercel Serverless Functions
+const allowCors = (fn) => async (req, res) => {
+  // Allow requests from any origin (crucial for mobile devices/scanners)
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*'); 
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+
+  // Handle browser/phone preflight OPTIONS check immediately
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
   }
-}, { _id: false });
-
-// 3. Main User Schema Configuration
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true }, 
-  password: { type: String, required: true },
-  email: { type: String, required: true }, 
-  websiteUrl: { type: String, required: true }, 
-  pushSubscription: { type: pushSubscriptionSchema, default: null }
-});
-
-userSchema.index({ username: 1, websiteUrl: 1 }, { unique: true });
-
-const User = mongoose.models.User || mongoose.model('users', userSchema, 'users');
-
-const connectDB = async () => {
-  if (mongoose.connections[0].readyState) return;
-  await mongoose.connect(process.env.MONGODB_URI);
+  
+  return await fn(req, res);
 };
-////
-const seedFirstUserIfNeeded = async () => {
-  if (!AUTO_SEED_FIRST_USER) return;
+
+// Main Request Handler
+const handler = async (req, res) => {
+  // Ensure we only listen to POST requests for incoming scans
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, error: 'Method Not Allowed' });
+  }
+
   try {
-    // Ensure the seed website exists first
-    const sampleUrl = 'https://mysamplewebsite.com';
-    await Website.findOneAndUpdate({ url: sampleUrl }, { url: sampleUrl }, { upsert: true });
+    // Read the incoming scan data payload from the phone
+    const { barcodeData, scannedAt, metadata } = req.body;
 
-    const userExists = await User.findOne({ username: 'sandy', websiteUrl: sampleUrl });
-    if (!userExists) {
-      console.log("First test user not found. Seeding record now...");
-      await User.create({
-        username: 'sandy',
-        email: 'warrendsteinacker@gmail.com',
-        password: 'Z2a$10$X7b9M2K6WvY7R8q2E1U8O.eX6z6fI3vE4y5U6t7o8p9q0r1s2t3u4', 
-        websiteUrl: sampleUrl,
-        pushSubscription: null
+    // 1. Validation check
+    if (!barcodeData) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Bad Request: No barcodeData found in payload.' 
       });
-      console.log("First user successfully seeded!");
     }
-  } catch (err) {
-    console.error("Automatic user seeding failed:", err.message);
-  }
-};
 
-///////////////
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    console.log(`[SCAN LOGGED]: Data: ${barcodeData} at ${scannedAt || new Date()}`);
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+    // 2. TODO: PLACE YOUR DATABASE LOGIC HERE
+    // Example (Firebase Firestore):
+    // const docRef = await db.collection('scans').add({
+    //   barcode: barcodeData,
+    //   timestamp: scannedAt || new Date().toISOString()
+    // });
 
-  if (req.method === 'POST' && req.body?.type === 'ping') {
-    return res.status(200).json({ 
-      status: "Success!", 
-      message: "Your Vercel server is alive and communicating perfectly!" 
+    // 3. Send success response back to the phone
+    return res.status(201).json({
+      success: true,
+      message: 'Scan logged successfully into database!',
+      receivedData: {
+        barcodeData,
+        scannedAt: scannedAt || new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('Server side database log error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Internal Server Error', 
+      details: error.message 
     });
   }
+};
 
-  if (req.method === 'POST') {
-    try {
-      await connectDB();
-      await seedFirstUserIfNeeded();
+// Export the function wrapped inside the CORS permission handler
+export default allowCors(handler);
 
-      const { username, password, email, type, pushSubscription, websiteUrl, notificationPayload } = req.body;
 
-      // 🌐 A. NEW SNIPPET: ADD A WEBSITE URL TO YOUR DATABASE ACCOUNT
-      if (type === 'addWebsite') {
-        if (!websiteUrl) return res.status(400).json({ error: 'Missing websiteUrl parameter' });
 
-        const existingWebsite = await Website.findOne({ url: websiteUrl });
-        if (existingWebsite) {
-          return res.status(400).json({ error: 'This website URL is already registered in your account.' });
-        }
 
-        await Website.create({ url: websiteUrl });
-        return res.status(201).json({ 
-          success: true, 
-          message: `Website ${websiteUrl} successfully registered to your system account.` 
-        });
-      }
 
-      // Safeguard: For registration, login, and sending, ensure the target website is registered in your account first
-      if (['register', 'login', 'sendNotification'].includes(type)) {
-        if (!websiteUrl) return res.status(400).json({ error: 'Missing websiteUrl parameter' });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/////apinotif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// import mongoose from 'mongoose';
+// import jwt from 'jsonwebtoken';
+// import bcrypt from 'bcryptjs';
+// import webpush from 'web-push';
+// import nodemailer from 'nodemailer';
+
+// // ⚙️ CONTROLLER VARIABLE: Set to true to auto-create the seed user, or false to disable it.
+// const AUTO_SEED_FIRST_USER = true;
+
+// // 1. New Website Schema Configuration (Tracks authorized sites in your database account)
+// const websiteSchema = new mongoose.Schema({
+//   url: { type: String, required: true, unique: true } // Stores the unique registered domain names
+// });
+
+// const Website = mongoose.models.Website || mongoose.model('websites', websiteSchema, 'websites');
+
+// // 2. Nested Push Subscription Schema Configuration
+// const pushSubscriptionSchema = new mongoose.Schema({
+//   endpoint: { type: String, required: true },
+//   expirationTime: { type: Number, default: null },
+//   keys: {
+//     p256dh: { type: String, required: true },
+//     auth: { type: String, required: true }
+//   }
+// }, { _id: false });
+
+// // 3. Main User Schema Configuration
+// const userSchema = new mongoose.Schema({
+//   username: { type: String, required: true }, 
+//   password: { type: String, required: true },
+//   email: { type: String, required: true }, 
+//   websiteUrl: { type: String, required: true }, 
+//   pushSubscription: { type: pushSubscriptionSchema, default: null }
+// });
+
+// userSchema.index({ username: 1, websiteUrl: 1 }, { unique: true });
+
+// const User = mongoose.models.User || mongoose.model('users', userSchema, 'users');
+
+// const connectDB = async () => {
+//   if (mongoose.connections[0].readyState) return;
+//   await mongoose.connect(process.env.MONGODB_URI);
+// };
+// ////
+// const seedFirstUserIfNeeded = async () => {
+//   if (!AUTO_SEED_FIRST_USER) return;
+//   try {
+//     // Ensure the seed website exists first
+//     const sampleUrl = 'https://mysamplewebsite.com';
+//     await Website.findOneAndUpdate({ url: sampleUrl }, { url: sampleUrl }, { upsert: true });
+
+//     const userExists = await User.findOne({ username: 'sandy', websiteUrl: sampleUrl });
+//     if (!userExists) {
+//       console.log("First test user not found. Seeding record now...");
+//       await User.create({
+//         username: 'sandy',
+//         email: 'warrendsteinacker@gmail.com',
+//         password: 'Z2a$10$X7b9M2K6WvY7R8q2E1U8O.eX6z6fI3vE4y5U6t7o8p9q0r1s2t3u4', 
+//         websiteUrl: sampleUrl,
+//         pushSubscription: null
+//       });
+//       console.log("First user successfully seeded!");
+//     }
+//   } catch (err) {
+//     console.error("Automatic user seeding failed:", err.message);
+//   }
+// };
+
+// ///////////////
+// export default async function handler(req, res) {
+//   res.setHeader('Access-Control-Allow-Origin', '*');
+//   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+//   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+//   if (req.method === 'OPTIONS') return res.status(200).end();
+
+//   if (req.method === 'POST' && req.body?.type === 'ping') {
+//     return res.status(200).json({ 
+//       status: "Success!", 
+//       message: "Your Vercel server is alive and communicating perfectly!" 
+//     });
+//   }
+
+//   if (req.method === 'POST') {
+//     try {
+//       await connectDB();
+//       await seedFirstUserIfNeeded();
+
+//       const { username, password, email, type, pushSubscription, websiteUrl, notificationPayload } = req.body;
+
+//       // 🌐 A. NEW SNIPPET: ADD A WEBSITE URL TO YOUR DATABASE ACCOUNT
+//       if (type === 'addWebsite') {
+//         if (!websiteUrl) return res.status(400).json({ error: 'Missing websiteUrl parameter' });
+
+//         const existingWebsite = await Website.findOne({ url: websiteUrl });
+//         if (existingWebsite) {
+//           return res.status(400).json({ error: 'This website URL is already registered in your account.' });
+//         }
+
+//         await Website.create({ url: websiteUrl });
+//         return res.status(201).json({ 
+//           success: true, 
+//           message: `Website ${websiteUrl} successfully registered to your system account.` 
+//         });
+//       }
+
+//       // Safeguard: For registration, login, and sending, ensure the target website is registered in your account first
+//       if (['register', 'login', 'sendNotification'].includes(type)) {
+//         if (!websiteUrl) return res.status(400).json({ error: 'Missing websiteUrl parameter' });
         
-        const isRegisteredSite = await Website.findOne({ url: websiteUrl });
-        if (!isRegisteredSite) {
-          return res.status(403).json({ error: `The website ${websiteUrl} is not registered in your system database account. Use 'addWebsite' type first.` });
-        }
-      }
+//         const isRegisteredSite = await Website.findOne({ url: websiteUrl });
+//         if (!isRegisteredSite) {
+//           return res.status(403).json({ error: `The website ${websiteUrl} is not registered in your system database account. Use 'addWebsite' type first.` });
+//         }
+//       }
 
-      // 1. REGISTER ROUTE 
-      if (type === 'register') {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await User.create({ 
-          username, 
-          email, 
-          password: hashedPassword, 
-          websiteUrl, 
-          pushSubscription: pushSubscription || null 
-        });
-        return res.status(201).json({ message: `User registered under ${websiteUrl}` });
-      }
+//       // 1. REGISTER ROUTE 
+//       if (type === 'register') {
+//         const hashedPassword = await bcrypt.hash(password, 10);
+//         await User.create({ 
+//           username, 
+//           email, 
+//           password: hashedPassword, 
+//           websiteUrl, 
+//           pushSubscription: pushSubscription || null 
+//         });
+//         return res.status(201).json({ message: `User registered under ${websiteUrl}` });
+//       }
 
-      // 2. LOGIN ROUTE 
-      if (type === 'login') {
-        const user = await User.findOne({ username, websiteUrl });
-        if (!user) return res.status(401).json({ error: 'User not found on this website' });
+//       // 2. LOGIN ROUTE 
+//       if (type === 'login') {
+//         const user = await User.findOne({ username, websiteUrl });
+//         if (!user) return res.status(401).json({ error: 'User not found on this website' });
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ error: 'Wrong password' });
+//         const isMatch = await bcrypt.compare(password, user.password);
+//         if (!isMatch) return res.status(401).json({ error: 'Wrong password' });
 
-        if (pushSubscription) {
-          user.pushSubscription = pushSubscription;
-          await user.save();
-        }
+//         if (pushSubscription) {
+//           user.pushSubscription = pushSubscription;
+//           await user.save();
+//         }
 
-        const token = jwt.sign(
-          { id: user._id, username: user.username, websiteUrl: user.websiteUrl },
-          process.env.JWT_SECRET,
-          { expiresIn: '7d' }
-        );
+//         const token = jwt.sign(
+//           { id: user._id, username: user.username, websiteUrl: user.websiteUrl },
+//           process.env.JWT_SECRET,
+//           { expiresIn: '7d' }
+//         );
 
-        return res.status(200).json({ token, success: true });
-      }
+//         return res.status(200).json({ token, success: true });
+//       }
 
-      // 3. TARGETED WEBSITE BROADCAST ROUTE
-      if (type === 'sendNotification') {
-        // Initialize Web Push configuration contextually
-        try {
-          webpush.setVapidDetails(
-            process.env.VAPID_SUBJECT || 'mailto:test@example.com',
-            process.env.VAPID_PUBLIC_KEY || '',
-            process.env.VAPID_PRIVATE_KEY || ''
-          );
-        } catch (vapidErr) {
-          return res.status(500).json({ error: "Server WebPush configuration missing keys.", details: vapidErr.message });
-        }
+//       // 3. TARGETED WEBSITE BROADCAST ROUTE
+//       if (type === 'sendNotification') {
+//         // Initialize Web Push configuration contextually
+//         try {
+//           webpush.setVapidDetails(
+//             process.env.VAPID_SUBJECT || 'mailto:test@example.com',
+//             process.env.VAPID_PUBLIC_KEY || '',
+//             process.env.VAPID_PRIVATE_KEY || ''
+//           );
+//         } catch (vapidErr) {
+//           return res.status(500).json({ error: "Server WebPush configuration missing keys.", details: vapidErr.message });
+//         }
 
-        // Initialize Nodemailer transporter contextually
-        const transporter = nodemailer.createTransport({
-          host: process.env.EMAIL_HOST,      
-          port: parseInt(process.env.EMAIL_PORT || '465'), 
-          secure: process.env.EMAIL_SECURE === 'true',     
-          auth: {
-            user: process.env.EMAIL_USER,     
-            pass: process.env.EMAIL_PASS,     
-          },
-        });
+//         // Initialize Nodemailer transporter contextually
+//         const transporter = nodemailer.createTransport({
+//           host: process.env.EMAIL_HOST,      
+//           port: parseInt(process.env.EMAIL_PORT || '465'), 
+//           secure: process.env.EMAIL_SECURE === 'true',     
+//           auth: {
+//             user: process.env.EMAIL_USER,     
+//             pass: process.env.EMAIL_PASS,     
+//           },
+//         });
 
-        const users = await User.find({ websiteUrl: websiteUrl }).select('email pushSubscription username');
+//         const users = await User.find({ websiteUrl: websiteUrl }).select('email pushSubscription username');
         
-        const dispatchResults = {
-          targetWebsite: websiteUrl,
-          totalTargetedUsers: users.length,
-          pushDispatches: [],
-          emailDispatches: []
-        };
+//         const dispatchResults = {
+//           targetWebsite: websiteUrl,
+//           totalTargetedUsers: users.length,
+//           pushDispatches: [],
+//           emailDispatches: []
+//         };
 
-        if (users.length === 0) {
-          return res.status(200).json({ 
-            success: false, 
-            message: `No registered subscribers found for website: ${websiteUrl}`,
-            dispatchResults 
-          });
-        }
+//         if (users.length === 0) {
+//           return res.status(200).json({ 
+//             success: false, 
+//             message: `No registered subscribers found for website: ${websiteUrl}`,
+//             dispatchResults 
+//           });
+//         }
 
-        const titleText = notificationPayload?.title || `Update from ${websiteUrl}`;
-        const bodyText = notificationPayload?.body || 'Check out our latest update!';
-        const payload = JSON.stringify({ title: titleText, body: bodyText });
+//         const titleText = notificationPayload?.title || `Update from ${websiteUrl}`;
+//         const bodyText = notificationPayload?.body || 'Check out our latest update!';
+//         const payload = JSON.stringify({ title: titleText, body: bodyText });
 
-        const notificationPromises = [];
+//         const notificationPromises = [];
 
-        users.forEach(user => {
-          // Process Web Push Notifications
-          if (user.pushSubscription) {
-            const pushPromise = webpush.sendNotification(user.pushSubscription, payload)
-              .then(() => {
-                dispatchResults.pushDispatches.push({ username: user.username, status: "Success" });
-              })
-              .catch(async (err) => {
-                if (err.statusCode === 410 || err.statusCode === 404) {
-                  await User.findByIdAndUpdate(user._id, { pushSubscription: null });
-                }
-                dispatchResults.pushDispatches.push({ username: user.username, status: "Failed", error: err.message });
-              });
-            notificationPromises.push(pushPromise);
-          } else {
-            dispatchResults.pushDispatches.push({ username: user.username, status: "Skipped", reason: "No push token saved" });
-          }
+//         users.forEach(user => {
+//           // Process Web Push Notifications
+//           if (user.pushSubscription) {
+//             const pushPromise = webpush.sendNotification(user.pushSubscription, payload)
+//               .then(() => {
+//                 dispatchResults.pushDispatches.push({ username: user.username, status: "Success" });
+//               })
+//               .catch(async (err) => {
+//                 if (err.statusCode === 410 || err.statusCode === 404) {
+//                   await User.findByIdAndUpdate(user._id, { pushSubscription: null });
+//                 }
+//                 dispatchResults.pushDispatches.push({ username: user.username, status: "Failed", error: err.message });
+//               });
+//             notificationPromises.push(pushPromise);
+//           } else {
+//             dispatchResults.pushDispatches.push({ username: user.username, status: "Skipped", reason: "No push token saved" });
+//           }
 
-          // Process High Priority Emails
-          if (user.email) {
-            const emailPromise = transporter.sendMail({
-              from: `"Website Notifications" <${process.env.EMAIL_USER}>`,
-              to: user.email,
-              subject: titleText,
-              text: bodyText,
-              html: `<p><strong>${titleText}</strong></p><p>${bodyText}</p><br><small>Sent via subscription to ${websiteUrl}</small>`,
-              priority: 'high', 
-              headers: {
-                'X-Priority': '1',          
-                'X-MSMail-Priority': 'High', 
-                'Importance': 'high'         
-              }
-            })
-            .then((info) => {
-              dispatchResults.emailDispatches.push({ email: user.email, status: "Success", messageId: info.messageId });
-            })
-            .catch(err => {
-              dispatchResults.emailDispatches.push({ email: user.email, status: "Failed", error: err.message });
-            });
-            notificationPromises.push(emailPromise);
-          } else {
-            dispatchResults.emailDispatches.push({ username: user.username, status: "Skipped", reason: "No email address found" });
-          }
-        });
+//           // Process High Priority Emails
+//           if (user.email) {
+//             const emailPromise = transporter.sendMail({
+//               from: `"Website Notifications" <${process.env.EMAIL_USER}>`,
+//               to: user.email,
+//               subject: titleText,
+//               text: bodyText,
+//               html: `<p><strong>${titleText}</strong></p><p>${bodyText}</p><br><small>Sent via subscription to ${websiteUrl}</small>`,
+//               priority: 'high', 
+//               headers: {
+//                 'X-Priority': '1',          
+//                 'X-MSMail-Priority': 'High', 
+//                 'Importance': 'high'         
+//               }
+//             })
+//             .then((info) => {
+//               dispatchResults.emailDispatches.push({ email: user.email, status: "Success", messageId: info.messageId });
+//             })
+//             .catch(err => {
+//               dispatchResults.emailDispatches.push({ email: user.email, status: "Failed", error: err.message });
+//             });
+//             notificationPromises.push(emailPromise);
+//           } else {
+//             dispatchResults.emailDispatches.push({ username: user.username, status: "Skipped", reason: "No email address found" });
+//           }
+//         });
 
-        await Promise.allSettled(notificationPromises);
+//         await Promise.allSettled(notificationPromises);
         
-        return res.status(200).json({ 
-          success: true, 
-          message: `Targeted notifications for ${websiteUrl} have been fully processed.`, 
-          dispatchResults 
-        });
-      }
+//         return res.status(200).json({ 
+//           success: true, 
+//           message: `Targeted notifications for ${websiteUrl} have been fully processed.`, 
+//           dispatchResults 
+//         });
+//       }
 
-    } catch (error) {
-      return res.status(500).json({ error: error.message });
-    }
-  } else {
-    return res.status(405).send('Method Not Allowed');
-  }
-}
-
-
+//     } catch (error) {
+//       return res.status(500).json({ error: error.message });
+//     }
+//   } else {
+//     return res.status(405).send('Method Not Allowed');
+//   }
+// }
 
 
+
+/////////////
 
 
 
