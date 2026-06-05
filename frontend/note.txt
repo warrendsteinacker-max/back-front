@@ -1,4 +1,4 @@
 note the pi can not read contents in  sd card need to install diffrent os on it mabey not the 64 bit version
 
 
-
+note could get phone to connect to my computer usb port via its cahrging end and turn it into barcode scanner
