@@ -9,7 +9,7 @@ const HOST = '0.0.0.0';
 app.use(express.json());
 app.use(express.text());
 
-// CORS configuration to allow local device handshakes
+// Setup open CORS rules so your phone can make a secure handshake with your PC hardware
 app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -42,12 +42,17 @@ function getRealWirelessIP() {
 
 const localIP = getRealWirelessIP();
 
-// Serve the frontend file directly when someone visits the server root URL
+// Delivers your updated front-end view right to your phone browser automatically
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Endpoint that processes data sent from the barcode scanner front-end
+// Dedicated route to instantly test if a local phone device can bypass the firewall
+app.get('/api/ping', (req, res) => {
+    res.status(200).json({ status: 'online', message: 'Handshake complete!' });
+});
+
+// Primary logging destination route for scanner syncs
 app.post('/api/sync', (req, res) => {
     console.log('\n==================================================');
     console.log('📬 INCOMING TRACKER PAYLOAD RECEIVED');
@@ -62,9 +67,9 @@ app.post('/api/sync', (req, res) => {
 
 app.listen(PORT, HOST, () => {
     console.log(`\n==================================================`);
-    console.log(` 💻 SERVER LIVE ON YOUR LOCAL NETWORK`);
-    console.log(` 1. Connect your phone to the same Wi-Fi network/hotspot.`);
-    console.log(` 2. On your phone browser, go to this exact link:`);
+    console.log(` 💻 SERVER LIVE AND READY FOR TESTING`);
+    console.log(` 1. Connect your phone to the same local Wi-Fi/Hotspot network.`);
+    console.log(` 2. On your mobile browser, go to this exact address:`);
     console.log(`    http://${localIP}:${PORT}`);
     console.log(`==================================================\n`);
 });
