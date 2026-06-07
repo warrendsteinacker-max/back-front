@@ -93,7 +93,7 @@
     
     <div class="form-group">
         <label for="serverIp">Server URL (Include http:// and Port):</label>
-        <input type="text" id="serverIp" placeholder="http://192.168.1.X:3000">
+        <input type="text" id="serverIp" value="http://100.103.196.73:3000">
     </div>
 
     <div class="form-group">
@@ -111,11 +111,6 @@
 </div>
 
 <script>
-    // Automatically pre-fill the input if page is loaded from a local server
-    document.getElementById('serverIp').value = window.location.origin.includes('http') 
-        ? window.location.origin 
-        : 'http://' + window.location.hostname + ':3000';
-
     const logDiv = document.getElementById('log');
 
     function updateLog(message, isError = false) {
@@ -133,7 +128,7 @@
             const text = await response.text();
             updateLog(`Server Response:\n${text}`);
         } catch (error) {
-            updateLog(`Connection Failed!\nVerify your IP, Port, and Wi-Fi connection.\nError: ${error.message}`, true);
+            updateLog(`Connection Failed!\nVerify your server terminal is running and phone is on the same local network.\nError: ${error.message}`, true);
         }
     }
 
@@ -147,12 +142,10 @@
 
         if (type === 'json') {
             headers['Content-Type'] = 'application/json';
-            // If empty, supply a default fallback object so the server has valid data
             if (!rawPayload.trim()) {
-                bodyContent = JSON.stringify({ message: "Default wireless payload", code: 200 });
+                bodyContent = JSON.stringify({ message: "Hello from wireless panel!", code: 200 });
                 document.getElementById('messageData').value = bodyContent;
             } else {
-                // Quick validation to check if typing is actual JSON structure
                 try {
                     JSON.parse(rawPayload);
                 } catch(e) {
