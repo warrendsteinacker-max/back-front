@@ -3,177 +3,349 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local Wireless Controller</title>
+    <title>Local Inventory & Purchase Tracker</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            background-color: #f4f7f6;
-            color: #333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 20px;
+            background-color: #f4f6f9;
+            color: #333;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
+        h1, h2 { margin-bottom: 10px; }
         .container {
-            max-width: 500px;
             width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
             background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             box-sizing: border-box;
         }
-        h2 {
-            margin-top: 0;
-            color: #2c3e50;
-            text-align: center;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            font-size: 14px;
-        }
-        input[type="text"], textarea {
+        #reader {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
+            background: #fafafa;
+            border: 2px dashed #ccc;
             border-radius: 6px;
-            font-size: 16px;
-            box-sizing: border-box;
-        }
-        textarea {
-            height: 80px;
-            resize: vertical;
-        }
-        .btn-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
         }
         button {
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            font-size: 15px;
-            font-weight: bold;
-            cursor: pointer;
+            background-color: #007bff;
             color: white;
-            transition: background 0.2s;
+            border: none;
+            padding: 10px 15px;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
         }
-        .btn-text { background-color: #3498db; }
-        .btn-text:hover { background-color: #2980b9; }
-        .btn-json { background-color: #2ecc71; }
-        .btn-json:hover { background-color: #27ae60; }
-        .btn-test { background-color: #e67e22; grid-column: span 2; }
-        .btn-test:hover { background-color: #d35400; }
-        #log {
-            margin-top: 20px;
-            padding: 12px;
-            background: #2c3e50;
-            color: #ecf0f1;
+        button:hover { background-color: #0056b3; }
+        button.secondary { background-color: #28a745; }
+        button.secondary:hover { background-color: #218838; }
+        button.danger { background-color: #dc3545; margin-top: 5px; padding: 5px 10px; font-size: 0.85rem; width: auto;}
+        button.danger:hover { background-color: #c82333; }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .modal-action-box {
+            background: #e9ecef;
+            padding: 15px;
             border-radius: 6px;
-            font-family: monospace;
-            font-size: 13px;
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 150px;
-            overflow-y: auto;
+            margin-top: 15px;
+            border-left: 5px solid #007bff;
+        }
+        .flex-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .item-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .item-card {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #e2e8f0;
+        }
+        .search-box { border-left: 5px solid #17a2b8; }
+        .hidden { display: none; }
+        #network-status {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Wireless Server Controller</h2>
-    
-    <div class="form-group">
-        <label for="serverIp">Server URL:</label>
-        <input type="text" id="serverIp" value="http://100.103.196.73:3000">
+    <h1>Local Item Tracker</h1>
+    <div id="network-status">Connected to Local Network Terminal</div>
+
+    <div class="container">
+        <h2>1. Scanner</h2>
+        <div id="reader" class="hidden"></div>
+        <button id="scan-btn" onclick="toggleScanner()">Start Scanner (Single Scan Mode)</button>
+
+        <div id="action-box" class="modal-action-box hidden">
+            <h3>Scanned Barcode: <span id="scanned-code-text" style="color:#007bff;"></span></h3>
+            <label for="item-name">Item Identity Name:</label>
+            <input type="text" id="item-name" placeholder="e.g., Planters Peanuts 16oz">
+            
+            <div class="flex-buttons">
+                <button class="secondary" onclick="saveScannedItem('inventory')">Add to Master Inventory</button>
+                <button style="background-color: #6f42c1;" onclick="saveScannedItem('purchased')">Log Direct to Purchased</button>
+            </div>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label for="messageData">Message Payload:</label>
-        <textarea id="messageData" placeholder="Type text here, or custom JSON..."></textarea>
+    <div class="container" style="border-left: 5px solid #6c757d;">
+        <h2>2. Manual Selection Logging</h2>
+        <p style="font-size: 0.9rem; color:#666; margin: 0 0 10px 0;">Select an item from your local Master Inventory dictionary to quickly record a purchase without using the camera.</p>
+        <label for="quick-inventory-select">Choose Item from Inventory:</label>
+        <select id="quick-inventory-select">
+            <option value="">-- No items available --</option>
+        </select>
+        <button class="secondary" onclick="purchaseFromSelect()">Log Selected Item as Purchased</button>
     </div>
 
-    <div class="btn-group">
-        <button class="btn-test" onclick="testConnection()">1. Test GET Connection</button>
-        <button class="btn-text" onclick="sendData('text')">2. Send as TEXT</button>
-        <button class="btn-json" onclick="sendData('json')">3. Send as JSON</button>
-    </div>
-
-    <div id="log">Status: Ready to link...</div>
-</div>
-
-<script>
-    const logDiv = document.getElementById('log');
-
-    function updateLog(message, isError = false) {
-        logDiv.innerText = message;
-        logDiv.style.backgroundColor = isError ? '#c0392b' : '#2c3e50';
-    }
-
-    // 1. GET Handshake
-    async function testConnection() {
-        const baseUrl = document.getElementById('serverIp').value.trim();
-        updateLog("Testing connection...");
+    <div class="container search-box">
+        <h2>3. Master Inventory Search</h2>
+        <input type="text" id="search-input" onkeyup="renderLists()" placeholder="Type a name or scan-code to filter lists instantly...">
         
-        try {
-            const response = await fetch(`${baseUrl}/`);
-            const text = await response.text();
-            updateLog(`Server Response:\n${text}`);
-        } catch (error) {
-            updateLog(`Connection Failed!\nError: ${error.message}`, true);
-        }
-    }
+        <h3>Local Inventory List</h3>
+        <ul id="inventory-ui-list" class="item-list"></ul>
+    </div>
 
-    // 2 & 3. POST Handshake
-    async function sendData(type) {
-        const baseUrl = document.getElementById('serverIp').value.trim();
-        const rawPayload = document.getElementById('messageData').value;
+    <div class="container" style="border-left: 5px solid #6f42c1;">
+        <h2>4. Purchased Log</h2>
+        <ul id="purchased-ui-list" class="item-list"></ul>
+    </div>
+
+    <script>
+        let inventoryItems = JSON.parse(localStorage.getItem('inventoryItems')) || [];
+        let purchasedLog = JSON.parse(localStorage.getItem('purchasedLog')) || [];
         
-        let headers = {};
-        let bodyContent = rawPayload;
+        let html5QrcodeScanner = null;
+        let currentScannedBarcode = "";
 
-        if (type === 'json') {
-            headers['Content-Type'] = 'application/json';
-            if (!rawPayload.trim()) {
-                bodyContent = JSON.stringify({ message: "Hello from wireless interface!" });
-                document.getElementById('messageData').value = bodyContent;
-            } else {
-                try {
-                    JSON.parse(rawPayload);
-                } catch(e) {
-                    updateLog("Error: Input is not valid JSON!", true);
-                    return;
+        // Function to transmit actions up to the running Node terminal console logs
+        async function syncWithLocalServer(actionType, itemPayload) {
+            const statusEl = document.getElementById('network-status');
+            try {
+                const response = await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: actionType, item: itemPayload })
+                });
+                if (response.ok) {
+                    statusEl.innerText = "Data Synced to Computer Terminal Successfully!";
+                    statusEl.style.backgroundColor = "#d4edda";
+                    statusEl.style.color = "#155724";
                 }
+            } catch (err) {
+                statusEl.innerText = "Sync Alert: Terminal Offline or Network Connection Unreachable.";
+                statusEl.style.backgroundColor = "#f8d7da";
+                statusEl.style.color = "#721c24";
+                console.error("Local sync network error:", err);
             }
-        } else {
-            headers['Content-Type'] = 'text/plain';
-            if (!rawPayload.trim()) bodyContent = "Raw wireless stream string.";
         }
 
-        updateLog(`Transmitting ${type.toUpperCase()}...`);
+        function toggleScanner() {
+            const readerDiv = document.getElementById('reader');
+            const scanBtn = document.getElementById('scan-btn');
 
-        try {
-            const response = await fetch(`${baseUrl}/data`, {
-                method: 'POST',
-                headers: headers,
-                body: bodyContent
-            });
-            const result = await response.json();
-            updateLog(`Server Response:\n${JSON.stringify(result, null, 2)}`);
-        } catch (error) {
-            updateLog(`Transmission Failed!\nError: ${error.message}`, true);
+            if (html5QrcodeScanner === null) {
+                readerDiv.classList.remove('hidden');
+                scanBtn.innerText = "Stop Scanner";
+
+                html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+                    fps: 10, 
+                    qrbox: { width: 260, height: 160 },
+                    rememberLastUsedCamera: true
+                }, false);
+
+                html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+            } else {
+                stopScanner();
+            }
         }
-    }
-</script>
 
+        function stopScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear().then(() => {
+                    html5QrcodeScanner = null;
+                    document.getElementById('reader').classList.add('hidden');
+                    document.getElementById('scan-btn').innerText = "Start Scanner (Single Scan Mode)";
+                }).catch(err => console.error("Scanner error: ", err));
+            }
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            stopScanner();
+            currentScannedBarcode = decodedText;
+            document.getElementById('scanned-code-text').innerText = decodedText;
+            
+            const matchedLocalItem = inventoryItems.find(item => item.barcode === decodedText) || 
+                                     purchasedLog.find(item => item.barcode === decodedText);
+            
+            document.getElementById('item-name').value = matchedLocalItem ? matchedLocalItem.name : "";
+            document.getElementById('action-box').classList.remove('hidden');
+        }
+
+        function onScanFailure(error) {}
+
+        function saveScannedItem(targetList) {
+            const nameInput = document.getElementById('item-name').value.trim();
+            const finalName = nameInput || `Barcode item ${currentScannedBarcode}`;
+            const barcodeExists = inventoryItems.some(item => item.barcode === currentScannedBarcode);
+
+            const itemPayload = {
+                id: Date.now().toString(),
+                barcode: currentScannedBarcode,
+                name: finalName,
+                timestamp: new Date().toLocaleString()
+            };
+
+            if (targetList === 'inventory') {
+                if (!barcodeExists) {
+                    inventoryItems.unshift(itemPayload);
+                } else {
+                    inventoryItems = inventoryItems.map(item => 
+                        item.barcode === currentScannedBarcode ? { ...item, name: finalName } : item
+                    );
+                }
+                localStorage.setItem('inventoryItems', JSON.stringify(inventoryItems));
+                syncWithLocalServer("ADD_TO_INVENTORY", itemPayload);
+            } else if (targetList === 'purchased') {
+                purchasedLog.unshift(itemPayload);
+                localStorage.setItem('purchasedLog', JSON.stringify(purchasedLog));
+
+                if (!barcodeExists) {
+                    inventoryItems.unshift({
+                        id: 'inv_' + Date.now().toString(),
+                        barcode: currentScannedBarcode,
+                        name: finalName,
+                        timestamp: new Date().toLocaleString()
+                    });
+                    localStorage.setItem('inventoryItems', JSON.stringify(inventoryItems));
+                }
+                syncWithLocalServer("LOG_PURCHASE", itemPayload);
+            }
+
+            document.getElementById('action-box').classList.add('hidden');
+            currentScannedBarcode = "";
+            document.getElementById('item-name').value = "";
+            renderLists();
+        }
+
+        function purchaseFromSelect() {
+            const selectEl = document.getElementById('quick-inventory-select');
+            const selectedId = selectEl.value;
+            if (!selectedId) return;
+
+            const baseTemplate = inventoryItems.find(item => item.id === selectedId);
+            if (baseTemplate) {
+                const logEntry = {
+                    id: Date.now().toString(),
+                    barcode: baseTemplate.barcode,
+                    name: baseTemplate.name,
+                    timestamp: new Date().toLocaleString()
+                };
+                
+                purchasedLog.unshift(logEntry);
+                localStorage.setItem('purchasedLog', JSON.stringify(purchasedLog));
+                renderLists();
+                syncWithLocalServer("MANUAL_SELECT_PURCHASE", logEntry);
+            }
+        }
+
+        function deleteItem(id, listType) {
+            if (listType === 'inventory') {
+                inventoryItems = inventoryItems.filter(item => item.id !== id);
+                localStorage.setItem('inventoryItems', JSON.stringify(inventoryItems));
+            } else {
+                purchasedLog = purchasedLog.filter(item => item.id !== id);
+                localStorage.setItem('purchasedLog', JSON.stringify(purchasedLog));
+            }
+            renderLists();
+        }
+
+        function renderLists() {
+            const searchQuery = document.getElementById('search-input').value.toLowerCase();
+            const inventoryUI = document.getElementById('inventory-ui-list');
+            const purchasedUI = document.getElementById('purchased-ui-list');
+            const selectUI = document.getElementById('quick-inventory-select');
+
+            inventoryUI.innerHTML = "";
+            const filteredInventory = inventoryItems.filter(item => 
+                item.name.toLowerCase().includes(searchQuery) || item.barcode.includes(searchQuery)
+            );
+
+            if (filteredInventory.length === 0) {
+                inventoryUI.innerHTML = `<li style="color:#888; font-size:0.9rem; padding: 5px;">No items match criteria.</li>`;
+            } else {
+                filteredInventory.forEach(item => {
+                    inventoryUI.innerHTML += `
+                        <li class="item-card">
+                            <div>
+                                <strong>${item.name}</strong><br>
+                                <span style="font-size:0.8rem; color:#666;">Code: ${item.barcode}</span>
+                            </div>
+                            <button class="danger" onclick="deleteItem('${item.id}', 'inventory')">Remove</button>
+                        </li>`;
+                });
+            }
+
+            purchasedUI.innerHTML = "";
+            const filteredPurchases = purchasedLog.filter(item => 
+                item.name.toLowerCase().includes(searchQuery) || item.barcode.includes(searchQuery)
+            );
+
+            if (filteredPurchases.length === 0) {
+                purchasedUI.innerHTML = `<li style="color:#888; font-size:0.9rem; padding: 5px;">No matching records found.</li>`;
+            } else {
+                filteredPurchases.forEach(item => {
+                    purchasedUI.innerHTML += `
+                        <li class="item-card" style="border-left: 4px solid #6f42c1;">
+                            <div>
+                                <strong>${item.name}</strong><br>
+                                <span style="font-size:0.75rem; color:#888;">Logged: ${item.timestamp}</span>
+                            </div>
+                            <button class="danger" onclick="deleteItem('${item.id}', 'purchased')">Delete</button>
+                        </li>`;
+                });
+            }
+
+            selectUI.innerHTML = inventoryItems.length === 0 
+                ? `<option value="">-- No registered inventory items --</option>`
+                : inventoryItems.map(item => `<option value="${item.id}">${item.name} (${item.barcode})</option>`).join('');
+        }
+
+        document.addEventListener("DOMContentLoaded", renderLists);
+    </script>
 </body>
 </html>
