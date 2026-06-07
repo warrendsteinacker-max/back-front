@@ -1,0 +1,21 @@
+{
+  "name": "notifapi",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/warrendsteinacker-max/back-front#readme",
+  "bugs": {
+    "url": "https://github.com/warrendsteinacker-max/back-front/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/warrendsteinacker-max/back-front.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "localserver.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  }
+}
