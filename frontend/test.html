@@ -388,6 +388,7 @@
 
 
 
+/////cluad http
 
 
 
@@ -397,10 +398,8 @@
 
 
 
-//////cluad https 
 
-
-
+<!-- //////cluad https 
 
 <!DOCTYPE html>
 <html lang="en">
@@ -415,15 +414,16 @@
     h1 { margin-bottom: 6px; font-size: 1.4rem; }
     h2 { margin: 0 0 10px; font-size: 1.05rem; }
     .card { width: 100%; max-width: 600px; background: white; padding: 16px; border-radius: 8px; margin-bottom: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.07); }
-    #reader { width: 100%; border: 2px dashed #ccc; border-radius: 6px; background: #fafafa; }
+    #reader { width: 100%; border: 2px dashed #ccc; border-radius: 6px; background: #fafafa; min-height: 60px; }
     button { background: #007bff; color: white; border: none; padding: 10px 14px; font-size: 0.95rem; border-radius: 5px; cursor: pointer; width: 100%; margin-top: 8px; }
     button:active { opacity: 0.8; }
-    .green  { background: #28a745; } .purple { background: #6f42c1; }
+    .green  { background: #28a745; }
+    .purple { background: #6f42c1; }
     .yellow { background: #ffc107; color: #212529; font-weight: bold; }
     .gray   { background: #6c757d; }
     .red    { background: #dc3545; margin-top: 4px; padding: 6px 10px; font-size: 0.8rem; width: auto; }
     .row    { display: flex; gap: 8px; }
-    .row button { flex: 1; }
+    .row button { flex: 1; margin-top: 8px; }
     input, select { width: 100%; padding: 9px; margin: 6px 0; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
     .action-box { background: #e9ecef; padding: 13px; border-radius: 6px; margin-top: 12px; border-left: 5px solid #007bff; }
     ul { list-style: none; padding: 0; margin: 0; }
@@ -436,8 +436,8 @@
     .t-purple { border-left: 5px solid #6f42c1; }
     .t-gray   { border-left: 5px solid #6c757d; }
     .t-yellow { border-top: 4px solid #ffc107; }
-    .cam-toggle { display: flex; gap: 6px; margin-top: 8px; }
-    .cam-toggle button { font-size: 0.82rem; padding: 7px; }
+    .cam-row  { display: flex; gap: 8px; margin-top: 8px; }
+    .cam-row button { flex: 1; font-size: 0.82rem; padding: 8px; }
     .cam-active { background: #0056b3 !important; outline: 3px solid #ffc107; }
   </style>
 </head>
@@ -449,21 +449,23 @@
 <!-- 0. NETWORK TEST -->
 <div class="card t-yellow">
   <h2>0. Network Test</h2>
+  <p style="font-size:0.83rem;color:#666;margin:0 0 2px">Tap to verify your phone can reach the server.</p>
   <button class="yellow" onclick="pingTest()">⚡ Test Connection to Server</button>
 </div>
 
 <!-- 1. SCANNER -->
 <div class="card">
   <h2>1. Barcode Scanner</h2>
-  <div id="reader" class="hidden"></div>
 
-  <button id="scan-btn" onclick="toggleScanner()">▶ Start Scanner</button>
-
-  <!-- camera selector — shown only when scanner is active -->
-  <div id="cam-controls" class="cam-toggle hidden">
-    <button id="btn-back"  onclick="switchCamera('environment')" class="cam-active">🔙 Back Camera</button>
-    <button id="btn-front" onclick="switchCamera('user')">🤳 Front Camera</button>
+  <!-- camera toggle — visible always so user can pick before starting -->
+  <div class="cam-row">
+    <button id="btn-front" class="cam-active" onclick="selectCamera('user')">🤳 Front Camera</button>
+    <button id="btn-back"                     onclick="selectCamera('environment')">🔙 Back Camera</button>
   </div>
+
+  <button id="scan-btn" onclick="toggleScanner()" style="margin-top:10px">▶ Start Scanner</button>
+
+  <div id="reader" class="hidden" style="margin-top:10px"></div>
 
   <div id="action-box" class="action-box hidden">
     <strong>Scanned: <span id="scanned-code" style="color:#007bff"></span></strong>
@@ -502,36 +504,41 @@
   <button class="gray" style="margin-top:10px" onclick="clearScans()">🗑 Clear Scan History</button>
 </div>
 
-<!-- 6. REQUEST LOG + DB -->
+<!-- 6. REQUEST LOG -->
 <div class="card" style="border-left:5px solid #17a2b8">
   <h2>6. Frontend Request Log</h2>
-  <div id="req-log">Waiting for requests...</div>
-  <button class="gray" onclick="loadFromServer()">🔄 Refresh DB from Server</button>
+  <div id="req-log">No requests yet.</div>
+  <button class="gray" style="margin-top:8px" onclick="loadFromServer()">🔄 Refresh from Server</button>
   <button class="red"  style="width:100%;margin-top:6px" onclick="clearDB()">🧹 Clear Entire DB</button>
 </div>
 
 <script>
   // ── STATE ────────────────────────────────────────────────
   let inventory = [], purchases = [], scans = [];
-  let scanner   = null;
+  let scanner        = null;
+  let scannerRunning = false;
   let currentBarcode = '';
-  let currentCamera  = 'environment'; // 'environment' = back, 'user' = front
+  let currentCamera  = 'user'; // default = front camera
   let reqLogLines    = [];
 
-  // ── STATUS BAR ───────────────────────────────────────────
+  // ── STATUS ───────────────────────────────────────────────
   function setStatus(msg, type = 'neutral') {
     const el = document.getElementById('status');
     el.innerText = msg;
-    const c = { ok: ['#d4edda','#155724','#c3e6cb'], error: ['#f8d7da','#721c24','#f5c6cb'], loading: ['#fff3cd','#856404','#ffeeba'], neutral: ['#e2e3e5','#383d41','#d6d8db'] };
+    const c = {
+      ok:      ['#d4edda','#155724','#c3e6cb'],
+      error:   ['#f8d7da','#721c24','#f5c6cb'],
+      loading: ['#fff3cd','#856404','#ffeeba'],
+      neutral: ['#e2e3e5','#383d41','#d6d8db']
+    };
     const [bg, color, border] = c[type] || c.neutral;
     Object.assign(el.style, { background: bg, color, border: `1px solid ${border}` });
   }
 
-  // ── REQUEST LOG (frontend side) ──────────────────────────
+  // ── REQUEST LOG ──────────────────────────────────────────
   function logReq(method, url, status, detail = '') {
-    const t   = new Date().toLocaleTimeString();
-    const line = `[${t}] ${method} ${url} → ${status}${detail ? '  ' + detail : ''}`;
-    reqLogLines.unshift(line);
+    const t = new Date().toLocaleTimeString();
+    reqLogLines.unshift(`[${t}] ${method} ${url} → ${status}${detail ? '  ' + detail : ''}`);
     if (reqLogLines.length > 60) reqLogLines.pop();
     document.getElementById('req-log').textContent = reqLogLines.join('\n');
   }
@@ -553,90 +560,99 @@
 
   // ── PING ─────────────────────────────────────────────────
   async function pingTest() {
-    setStatus('Pinging...', 'loading');
+    setStatus('Pinging server...', 'loading');
     const t = Date.now();
     try {
       const r = await api('GET', '/api/ping');
-      setStatus(`✅ Connected in ${Date.now()-t}ms — camera ready`, 'ok');
+      setStatus(`✅ Connected in ${Date.now() - t}ms — HTTPS + camera ready`, 'ok');
       await loadFromServer();
     } catch {
-      setStatus('❌ Failed — same Wi-Fi? Cellular off? Firewall open?', 'error');
+      setStatus('❌ No connection — same Wi-Fi? Cellular data off? Firewall port 3000 open?', 'error');
     }
   }
 
   // ── LOAD ALL DATA ────────────────────────────────────────
   async function loadFromServer() {
     try {
-      const r = await api('GET', '/api/db');
+      const r   = await api('GET', '/api/db');
       inventory = r.data.inventory || [];
       purchases = r.data.purchases || [];
       scans     = r.data.scans     || [];
       renderAll();
-    } catch(e) { console.error('loadFromServer failed:', e); }
+    } catch (e) { console.error('loadFromServer:', e); }
+  }
+
+  // ── CAMERA SELECTOR ──────────────────────────────────────
+  function selectCamera(facingMode) {
+    currentCamera = facingMode;
+    document.getElementById('btn-front').classList.toggle('cam-active', facingMode === 'user');
+    document.getElementById('btn-back').classList.toggle('cam-active',  facingMode === 'environment');
+
+    // if scanner is already running, restart with new camera
+    if (scannerRunning) {
+      stopScanner();
+      setTimeout(() => startScanner(), 400);
+    }
   }
 
   // ── SCANNER ──────────────────────────────────────────────
   function toggleScanner() {
-    if (!scanner) startScanner(currentCamera);
-    else          stopScanner();
+    scannerRunning ? stopScanner() : startScanner();
   }
 
-  function startScanner(facingMode) {
-    const reader = document.getElementById('reader');
-    const btn    = document.getElementById('scan-btn');
-    const cams   = document.getElementById('cam-controls');
+  function startScanner() {
+    const readerEl = document.getElementById('reader');
+    readerEl.classList.remove('hidden');
+    readerEl.innerHTML = ''; // clear any previous instance artifacts
+    document.getElementById('scan-btn').innerText = '⏹ Stop Scanner';
+    scannerRunning = true;
 
-    reader.classList.remove('hidden');
-    cams.classList.remove('hidden');
-    btn.innerText = '⏹ Stop Scanner';
-
+    // Html5QrcodeScanner uses videoConstraints for facingMode
     scanner = new Html5QrcodeScanner('reader', {
       fps: 10,
-      qrbox: { width: 260, height: 160 },
-      facingMode                           // 'environment' or 'user'
-    }, false);
-    scanner.render(onScanSuccess, () => {});
+      qrbox: { width: 250, height: 150 },
+      videoConstraints: {
+        facingMode: { ideal: currentCamera }  // 'user' or 'environment'
+      },
+      rememberLastUsedCamera: false
+    }, /* verbose= */ false);
 
-    // highlight active camera button
-    document.getElementById('btn-back').classList.toggle('cam-active',  facingMode === 'environment');
-    document.getElementById('btn-front').classList.toggle('cam-active', facingMode === 'user');
+    scanner.render(onScanSuccess, (err) => {
+      // suppress per-frame decode failures (normal behaviour)
+    });
   }
 
   function stopScanner() {
     if (!scanner) return;
     scanner.clear().catch(() => {});
     scanner = null;
+    scannerRunning = false;
     document.getElementById('reader').classList.add('hidden');
-    document.getElementById('cam-controls').classList.add('hidden');
+    document.getElementById('reader').innerHTML = '';
     document.getElementById('scan-btn').innerText = '▶ Start Scanner';
   }
 
-  function switchCamera(facingMode) {
-    currentCamera = facingMode;
-    stopScanner();
-    setTimeout(() => startScanner(facingMode), 300); // brief pause lets camera release
-  }
-
+  // ── ON SCAN SUCCESS ──────────────────────────────────────
   async function onScanSuccess(code) {
     stopScanner();
     currentBarcode = code;
     document.getElementById('scanned-code').innerText = code;
 
-    // POST raw scan event to server with camera info
+    // log raw scan to server
     await api('POST', '/api/scans', {
       barcode: code,
       camera:  currentCamera === 'environment' ? 'back' : 'front',
       device:  navigator.userAgent.slice(0, 80)
     });
 
-    // auto-fill name if already known
+    // auto-fill name if already in inventory
     const match = inventory.find(i => i.barcode === code);
     document.getElementById('item-name').value = match ? match.name : '';
     document.getElementById('action-box').classList.remove('hidden');
     await loadFromServer();
   }
 
-  // ── SAVE FROM SCANNER ACTION BOX ────────────────────────
+  // ── SAVE ITEM ────────────────────────────────────────────
   async function saveItem(target) {
     const name = document.getElementById('item-name').value.trim() || `Item ${currentBarcode}`;
     setStatus('Saving...', 'loading');
@@ -668,7 +684,7 @@
     } catch { setStatus('❌ Failed', 'error'); }
   }
 
-  // ── DELETE HELPERS ───────────────────────────────────────
+  // ── DELETE ───────────────────────────────────────────────
   async function deleteItem(id, type) {
     const url = type === 'inventory' ? `/api/inventory/${id}` : `/api/purchases/${id}`;
     try { await api('DELETE', url); await loadFromServer(); }
@@ -691,7 +707,6 @@
   function renderAll() {
     const q = (document.getElementById('search').value || '').toLowerCase();
 
-    // inventory list
     const filtInv = inventory.filter(i => i.name.toLowerCase().includes(q) || i.barcode.includes(q));
     document.getElementById('inv-list').innerHTML = filtInv.length === 0
       ? '<li style="color:#888;padding:5px;font-size:0.85rem">No items.</li>'
@@ -701,7 +716,6 @@
             <button class="red" onclick="deleteItem('${i.id}','inventory')">Remove</button>
           </li>`).join('');
 
-    // purchases list
     const filtPur = purchases.filter(i => i.name.toLowerCase().includes(q) || i.barcode.includes(q));
     document.getElementById('pur-list').innerHTML = filtPur.length === 0
       ? '<li style="color:#888;padding:5px;font-size:0.85rem">No purchases.</li>'
@@ -711,7 +725,6 @@
             <button class="red" onclick="deleteItem('${p.id}','purchase')">Delete</button>
           </li>`).join('');
 
-    // scan history
     document.getElementById('scan-list').innerHTML = scans.length === 0
       ? '<li style="color:#888;padding:5px;font-size:0.85rem">No scans yet.</li>'
       : scans.map(s => `
@@ -719,7 +732,6 @@
             <div><strong>${s.barcode}</strong><small>${s.camera} camera · ${new Date(s.scannedAt).toLocaleString()}</small></div>
           </li>`).join('');
 
-    // quick-select dropdown
     document.getElementById('quick-select').innerHTML = inventory.length === 0
       ? '<option value="">-- No inventory items --</option>'
       : inventory.map(i => `<option value="${i.id}">${i.name} (${i.barcode})</option>`).join('');
@@ -727,6 +739,372 @@
 
   // ── INIT ─────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => loadFromServer().catch(() => {}));
+</script>
+</body>
+</html> -->
+
+
+
+
+
+//////gemini https 
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Item Tracker</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 14px; background: #f4f6f9; color: #333; display: flex; flex-direction: column; align-items: center; }
+    h1 { margin-bottom: 6px; font-size: 1.4rem; }
+    h2 { margin: 0 0 10px; font-size: 1.05rem; }
+    .card { width: 100%; max-width: 600px; background: white; padding: 16px; border-radius: 8px; margin-bottom: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.07); }
+    #reader { width: 100%; border: 2px dashed #ccc; border-radius: 6px; background: #fafafa; min-height: 60px; }
+    button { background: #007bff; color: white; border: none; padding: 10px 14px; font-size: 0.95rem; border-radius: 5px; cursor: pointer; width: 100%; margin-top: 8px; }
+    button:active { opacity: 0.8; }
+    .green  { background: #28a745; }
+    .purple { background: #6f42c1; }
+    .yellow { background: #ffc107; color: #212529; font-weight: bold; }
+    .gray   { background: #6c757d; }
+    .red    { background: #dc3545; margin-top: 4px; padding: 6px 10px; font-size: 0.8rem; width: auto; }
+    .row    { display: flex; gap: 8px; }
+    .row button { flex: 1; margin-top: 8px; }
+    input, select { width: 100%; padding: 9px; margin: 6px 0; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; }
+    .action-box { background: #e9ecef; padding: 13px; border-radius: 6px; margin-top: 12px; border-left: 5px solid #007bff; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    .item-card { background: #f8f9fa; padding: 11px; border-radius: 5px; margin-bottom: 7px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0; font-size: 0.9rem; }
+    small { color: #888; font-size: 0.75rem; display: block; }
+    .hidden { display: none; }
+    #status { padding: 10px 14px; margin-bottom: 12px; border-radius: 5px; font-weight: bold; font-size: 0.88rem; text-align: center; width: 100%; max-width: 600px; background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; }
+    #req-log { background: #1e1e1e; color: #9cdcfe; font-family: monospace; font-size: 0.72rem; padding: 10px; border-radius: 5px; max-height: 180px; overflow-y: auto; white-space: pre-wrap; margin-top: 10px; }
+    .t-teal   { border-left: 5px solid #17a2b8; }
+    .t-purple { border-left: 5px solid #6f42c1; }
+    .t-gray   { border-left: 5px solid #6c757d; }
+    .t-yellow { border-top: 4px solid #ffc107; }
+    .cam-row  { display: flex; gap: 8px; margin-top: 8px; }
+    .cam-row button { flex: 1; font-size: 0.82rem; padding: 8px; color: white; background: #6c757d; }
+    .cam-active { background: #28a745 !important; font-weight: bold; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
+  </style>
+</head>
+<body>
+
+<h1>📦 Item Tracker</h1>
+<div id="status">Tap ⚡ Test Connection to verify server link.</div>
+
+<div class="card t-yellow">
+  <h2>0. Network Test</h2>
+  <p style="font-size:0.83rem;color:#666;margin:0 0 2px">Tap to verify your phone can reach the server.</p>
+  <button class="yellow" onclick="pingTest()">⚡ Test Connection to Server</button>
+</div>
+
+<div class="card">
+  <h2>1. Barcode Scanner</h2>
+
+  <div class="cam-row">
+    <button id="btn-front" onclick="selectCamera('user')">🤳 Front Camera</button>
+    <button id="btn-back" class="cam-active" onclick="selectCamera('environment')">🔙 Back (External) Camera</button>
+  </div>
+
+  <button id="scan-btn" onclick="toggleScanner()" style="margin-top:10px">▶ Start Scanner</button>
+
+  <div id="reader" class="hidden" style="margin-top:10px"></div>
+
+  <div id="action-box" class="action-box hidden">
+    <strong>Scanned: <span id="scanned-code" style="color:#007bff"></span></strong>
+    <input type="text" id="item-name" placeholder="Item name (e.g. Planters Peanuts 16oz)">
+    <div class="row">
+      <button class="green"  onclick="saveItem('inventory')">Add to Inventory</button>
+      <button class="purple" onclick="saveItem('purchase')">Log as Purchase</button>
+    </div>
+  </div>
+</div>
+
+<div class="card t-gray">
+  <h2>2. Quick Purchase</h2>
+  <select id="quick-select"><option value="">-- Select inventory item --</option></select>
+  <button class="green" onclick="quickPurchase()">Log as Purchase</button>
+</div>
+
+<div class="card t-teal">
+  <h2>3. Inventory</h2>
+  <input type="text" id="search" oninput="renderAll()" placeholder="Search name or barcode...">
+  <ul id="inv-list"></ul>
+</div>
+
+<div class="card t-purple">
+  <h2>4. Purchase Log</h2>
+  <ul id="pur-list"></ul>
+</div>
+
+<div class="card" style="border-left:5px solid #fd7e14">
+  <h2>5. Scan History</h2>
+  <ul id="scan-list"></ul>
+  <button class="gray" style="margin-top:10px" onclick="clearScans()">🗑 Clear Scan History</button>
+</div>
+
+<div class="card" style="border-left:5px solid #17a2b8">
+  <h2>6. Frontend Request Log</h2>
+  <div id="req-log">No requests yet.</div>
+  <button class="gray" style="margin-top:8px" onclick="loadFromServer()">🔄 Refresh from Server</button>
+  <button class="red"  style="width:100%;margin-top:6px" onclick="clearDB()">🧹 Clear Entire DB</button>
+</div>
+
+<script>
+  // ── STATE ────────────────────────────────────────────────
+  let inventory = [], purchases = [], scans = [];
+  let scanner        = null;
+  let scannerRunning = false;
+  let currentBarcode = '';
+  let currentCamera  = 'environment'; // Changed default to back-facing camera
+  let reqLogLines    = [];
+
+  // ── STATUS ───────────────────────────────────────────────
+  function setStatus(msg, type = 'neutral') {
+    const el = document.getElementById('status');
+    el.innerText = msg;
+    const c = {
+      ok:      ['#d4edda','#155724','#c3e6cb'],
+      error:   ['#f8d7da','#721c24','#f5c6cb'],
+      loading: ['#fff3cd','#856404','#ffeeba'],
+      neutral: ['#e2e3e5','#383d41','#d6d8db']
+    };
+    const [bg, color, border] = c[type] || c.neutral;
+    Object.assign(el.style, { background: bg, color, border: `1px solid ${border}` });
+  }
+
+  // ── REQUEST LOG ──────────────────────────────────────────
+  function logReq(method, url, status, detail = '') {
+    const t = new Date().toLocaleTimeString();
+    reqLogLines.unshift(`[${t}] ${method} ${url} → ${status}${detail ? '  ' + detail : ''}`);
+    if (reqLogLines.length > 60) reqLogLines.pop();
+    document.getElementById('req-log').textContent = reqLogLines.join('\n');
+  }
+
+  // ── API HELPER ───────────────────────────────────────────
+  async function api(method, url, body) {
+    const opts = { method, headers: {} };
+    if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    try {
+      const res  = await fetch(url, opts);
+      const data = await res.json();
+      logReq(method, url, res.status, body ? JSON.stringify(body).slice(0, 60) : '');
+      return { ok: res.ok, status: res.status, data };
+    } catch (e) {
+      logReq(method, url, 'FAILED', e.message);
+      throw e;
+    }
+  }
+
+  // ── CONNECTION VERIFICATION (PING) ────────────────────────
+  async function pingTest() {
+    setStatus('Pinging backend server interface...', 'loading');
+    const startTime = Date.now();
+    try {
+      // Fetches directly against relative path on your node server engine
+      const r = await api('GET', '/api/ping');
+      if (r.ok) {
+        setStatus(`✅ Connected! Response in ${Date.now() - startTime}ms. System sync active.`, 'ok');
+        await loadFromServer();
+      } else {
+        throw new Error(`Server returned bad status: ${r.status}`);
+      }
+    } catch (err) {
+      setStatus(`❌ Connection Failed: ${err.message}. Check firewall rule or IP.`, 'error');
+    }
+  }
+
+  // ── LOAD DATA ────────────────────────────────────────
+  async function loadFromServer() {
+    try {
+      const r   = await api('GET', '/api/db');
+      inventory = r.data.inventory || [];
+      purchases = r.data.purchases || [];
+      scans     = r.data.scans     || [];
+      renderAll();
+    } catch (e) { 
+      console.error('loadFromServer:', e); 
+    }
+  }
+
+  // ── CAMERA SWITCHING ─────────────────────────────────────
+  function selectCamera(facingMode) {
+    currentCamera = facingMode;
+    document.getElementById('btn-front').classList.toggle('cam-active', facingMode === 'user');
+    document.getElementById('btn-back').classList.toggle('cam-active',  facingMode === 'environment');
+
+    // Live Hot-Swap: If scanner is running, tear down and reboot seamlessly
+    if (scannerRunning) {
+      stopScanner();
+      setTimeout(() => startScanner(), 250);
+    }
+  }
+
+  // ── SCANNER ENGINE CONTROL ────────────────────────────────
+  function toggleScanner() {
+    scannerRunning ? stopScanner() : startScanner();
+  }
+
+  function startScanner() {
+    const readerEl = document.getElementById('reader');
+    readerEl.classList.remove('hidden');
+    readerEl.innerHTML = ''; 
+    document.getElementById('scan-btn').innerText = '⏹ Stop Scanner';
+    scannerRunning = true;
+
+    // Fixed constraint handling to enforce selected camera hardware
+    scanner = new Html5QrcodeScanner('reader', {
+      fps: 15,
+      qrbox: { width: 260, height: 160 },
+      videoConstraints: {
+        facingMode: { ideal: currentCamera } 
+      },
+      rememberLastUsedCamera: false
+    }, false);
+
+    scanner.render(onScanSuccess, (err) => {
+      // Catch framing adjustments silently
+    });
+  }
+
+  function stopScanner() {
+    if (!scanner) return;
+    scanner.clear().catch(() => {});
+    scanner = null;
+    scannerRunning = false;
+    document.getElementById('reader').classList.add('hidden');
+    document.getElementById('reader').innerHTML = '';
+    document.getElementById('scan-btn').innerText = '▶ Start Scanner';
+  }
+
+  // ── ON SCAN SUCCESS ──────────────────────────────────────
+  async function onScanSuccess(code) {
+    stopScanner();
+    currentBarcode = code;
+    document.getElementById('scanned-code').innerText = code;
+
+    try {
+      await api('POST', '/api/scans', {
+        barcode: code,
+        camera:  currentCamera === 'environment' ? 'back' : 'front',
+        device:  navigator.userAgent.slice(0, 50)
+      });
+    } catch(e) {
+      console.error("Failed logging raw scan event", e);
+    }
+
+    const match = inventory.find(i => i.barcode === code);
+    document.getElementById('item-name').value = match ? match.name : '';
+    document.getElementById('action-box').classList.remove('hidden');
+    await loadFromServer();
+  }
+
+  // ── SAVE OPERATIONS ──────────────────────────────────────
+  async function saveItem(target) {
+    const name = document.getElementById('item-name').value.trim() || `Item ${currentBarcode}`;
+    setStatus('Saving to server...', 'loading');
+    try {
+      if (target === 'inventory') {
+        await api('POST', '/api/inventory', { barcode: currentBarcode, name });
+        setStatus(`✅ "${name}" saved to inventory`, 'ok');
+      } else {
+        await api('POST', '/api/purchases', { barcode: currentBarcode, name });
+        setStatus(`✅ "${name}" logged as purchase`, 'ok');
+      }
+      document.getElementById('action-box').classList.add('hidden');
+      document.getElementById('item-name').value = '';
+      currentBarcode = '';
+      await loadFromServer();
+    } catch { 
+      setStatus('❌ Save failed — check pipeline visibility', 'error'); 
+    }
+  }
+
+  // ── QUICK PURCHASE ───────────────────────────────────────
+  async function quickPurchase() {
+    const sel  = document.getElementById('quick-select');
+    const item = inventory.find(i => i.id === sel.value);
+    if (!item) return;
+    setStatus('Processing transaction...', 'loading');
+    try {
+      await api('POST', '/api/purchases', { barcode: item.barcode, name: item.name });
+      setStatus(`✅ "${item.name}" logged as purchase`, 'ok');
+      await loadFromServer();
+    } catch { 
+      setStatus('❌ Failed', 'error'); 
+    }
+  }
+
+  // ── DELETE OPERATIONS ────────────────────────────────────
+  async function deleteItem(id, type) {
+    const url = type === 'inventory' ? `/api/inventory/${id}` : `/api/purchases/${id}`;
+    try { 
+      await api('DELETE', url); 
+      await loadFromServer(); 
+    } catch { 
+      setStatus('❌ Delete operation dropped', 'error'); 
+    }
+  }
+
+  async function clearScans() {
+    await api('DELETE', '/api/scans');
+    await loadFromServer();
+  }
+
+  async function clearDB() {
+    if (!confirm('Clear the entire server database?')) return;
+    await api('DELETE', '/api/db');
+    await loadFromServer();
+    setStatus('🧹 Database cleared', 'neutral');
+  }
+
+  // ── RENDER ENGINE ────────────────────────────────────────
+  function renderAll() {
+    const q = (document.getElementById('search').value || '').toLowerCase();
+
+    const filtInv = inventory.filter(i => i.name.toLowerCase().includes(q) || i.barcode.includes(q));
+    document.getElementById('inv-list').innerHTML = filtInv.length === 0
+      ? '<li style="color:#888;padding:5px;font-size:0.85rem">No inventory items.</li>'
+      : filtInv.map(i => `
+          <li class="item-card">
+            <div><strong>${i.name}</strong><small>Barcode: ${i.barcode}</small></div>
+            <button class="red" onclick="deleteItem('${i.id}','inventory')">Remove</button>
+          </li>`).join('');
+
+    const filtPur = purchases.filter(i => i.name.toLowerCase().includes(q) || i.barcode.includes(q));
+    document.getElementById('pur-list').innerHTML = filtPur.length === 0
+      ? '<li style="color:#888;padding:5px;font-size:0.85rem">No records found.</li>'
+      : filtPur.map(p => `
+          <li class="item-card" style="border-left:4px solid #6f42c1">
+            <div><strong>${p.name}</strong><small>${new Date(p.loggedAt).toLocaleString()}</small></div>
+            <button class="red" onclick="deleteItem('${p.id}','purchase')">Delete</button>
+          </li>`).join('');
+
+    document.getElementById('scan-list').innerHTML = scans.length === 0
+      ? '<li style="color:#888;padding:5px;font-size:0.85rem">No scans logged.</li>'
+      : scans.map(s => `
+          <li class="item-card" style="border-left:4px solid #fd7e14">
+            <div><strong>${s.barcode}</strong><small>${s.camera} camera · ${new Date(s.scannedAt).toLocaleString()}</small></div>
+          </li>`).join('');
+
+    document.getElementById('quick-select').innerHTML = inventory.length === 0
+      ? '<option value="">-- No inventory items --</option>'
+      : inventory.map(i => `<option value="${i.id}">${i.name} (${i.barcode})</option>`).join('');
+  }
+
+  // ── INITIALIZATION ───────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    loadFromServer().catch(() => {
+      setStatus('⚠️ Server offline or cert untrusted. Run Network Test.', 'error');
+    });
+  });
 </script>
 </body>
 </html>
