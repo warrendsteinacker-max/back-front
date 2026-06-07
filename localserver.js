@@ -1,13 +1,29 @@
-// import express from 'express';
-const express = require('express')
+const express = require('express');
+const os = require('os'); // Built-in Node module to get system info
+
 const app = express();
-// Using 0.0.0.0 tells the server to listen on all network interfaces (Localhost AND your Local IP)
 const PORT = 3000;
-const HOST = '0.0.0.0'; 
+const HOST = '0.0.0.0'; // Listens on all network interfaces
 
 // Middleware to parse JSON and text data
 app.use(express.json());
 app.use(express.text());
+
+// Function to automatically find your computer's local network IP address
+function getLocalIPAddress() {
+    const interfaces = os.networkInterfaces();
+    for (const interfaceName in interfaces) {
+        for (const networkInterface of interfaces[interfaceName]) {
+            // Skip over internal loopback addresses like 127.0.0.1 and look for IPv4
+            if (networkInterface.family === 'IPv4' && !networkInterface.internal) {
+                return networkInterface.address;
+            }
+        }
+    }
+    return 'localhost'; // Fallback if no network connection is active
+}
+
+const localIP = getLocalIPAddress();
 
 // Simple GET route to test connection
 app.get('/', (req, res) => {
@@ -22,6 +38,9 @@ app.post('/data', (req, res) => {
 });
 
 app.listen(PORT, HOST, () => {
-    console.log(`Server running locally.`);
-    console.log(`Target Address for your phone: http://YOUR_COMPUTER_IP:${PORT}`);
+    console.log(`\n==================================================`);
+    console.log(` Server running locally on your wireless network!`);
+    console.log(` Open your phone browser and type this exact URL:`);
+    console.log(` http://${localIP}:${PORT}`);
+    console.log(`==================================================\n`);
 });
