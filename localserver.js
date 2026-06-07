@@ -663,12 +663,17 @@
 
 
 
+
+
+
+
+
 const express = require('express');
-const https = require('https');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const app = express();
+const https   = require('https');
+const fs      = require('fs');
+const os      = require('os');
+const path    = require('path');
+const app     = express();
 
 const PORT = 3000;
 const HOST = '0.0.0.0';
@@ -677,9 +682,9 @@ const HOST = '0.0.0.0';
 // IN-MEMORY DATABASE
 // ============================================================
 let db = {
-  inventory: [],
-  purchases: [],
-  scans: []
+  inventory: [],   // { id, barcode, name, createdAt, updatedAt? }
+  purchases: [],   // { id, barcode, name, loggedAt }
+  scans:     []    // { id, barcode, scannedAt }
 };
 
 // ============================================================
@@ -688,71 +693,45 @@ let db = {
 function getLocalIP() {
   const ifaces = os.networkInterfaces();
   console.log('\n[STARTUP] Scanning network interfaces...');
-  for (const name in ifaces) {
-    for (const net of ifaces[name]) {
-      console.log(`  Interface: ${name} | ${net.address} | Internal: ${net.internal} | ${net.family}`);
-    }
-  }
+  for (const n in ifaces)
+    for (const net of ifaces[n])
+      console.log(`  ${n} | ${net.address} | internal:${net.internal} | ${net.family}`);
 
-  // Priority 1: real Wi-Fi 192.168.x.x
-  for (const name in ifaces) {
-    for (const net of ifaces[name]) {
-      if (net.family === 'IPv4' && !net.internal && net.address.startsWith('192.168.') && !net.address.startsWith('192.168.137.')) {
-        console.log(`  [SELECTED] Wi-Fi IP: ${net.address} (${name})`);
-        return net.address;
-      }
-    }
-  }
-  // Priority 2: PC hotspot
-  for (const name in ifaces) {
-    for (const net of ifaces[name]) {
-      if (net.family === 'IPv4' && !net.internal && net.address.startsWith('192.168.137.')) {
-        console.log(`  [SELECTED] Hotspot IP: ${net.address} (${name})`);
-        return net.address;
-      }
-    }
-  }
-  // Priority 3: 10.x.x.x
-  for (const name in ifaces) {
-    for (const net of ifaces[name]) {
-      if (net.family === 'IPv4' && !net.internal && net.address.startsWith('10.')) {
-        console.log(`  [SELECTED] 10.x IP: ${net.address} (${name})`);
-        return net.address;
-      }
-    }
-  }
-  // Last resort: skip Tailscale explicitly
-  for (const name in ifaces) {
-    if (/tailscale/i.test(name)) continue;
-    for (const net of ifaces[name]) {
-      if (net.family === 'IPv4' && !net.internal) {
-        console.log(`  [SELECTED] Fallback IP: ${net.address} (${name})`);
-        return net.address;
-      }
-    }
-  }
-  return 'localhost';
+  const pick = (test) => {
+    for (const n in ifaces)
+      for (const net of ifaces[n])
+        if (net.family === 'IPv4' && !net.internal && test(net.address, n)) {
+          console.log(`  [SELECTED] ${net.address} (${n})`);
+          return net.address;
+        }
+    return null;
+  };
+
+  return (
+    pick((a, n) => a.startsWith('192.168.') && !a.startsWith('192.168.137.') && !/tailscale/i.test(n)) ||
+    pick((a, n) => a.startsWith('192.168.137.')                               && !/tailscale/i.test(n)) ||
+    pick((a, n) => a.startsWith('10.')                                        && !/tailscale/i.test(n)) ||
+    pick((a, n) =>                                                               !/tailscale/i.test(n)) ||
+    'localhost'
+  );
 }
 
 const localIP = getLocalIP();
 
 // ============================================================
-// GLOBAL REQUEST LOGGER
+// REQUEST LOGGER — every single request logged in full
 // ============================================================
 app.use((req, res, next) => {
   const t = new Date().toLocaleTimeString();
-  console.log(`\n${'='.repeat(55)}`);
+  console.log(`\n${'─'.repeat(55)}`);
   console.log(`[${t}] ${req.method} ${req.url}`);
-  console.log(`  From:         ${req.ip || req.socket.remoteAddress}`);
-  console.log(`  Content-Type: ${req.headers['content-type'] || 'none'}`);
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log(`  Body:         ${JSON.stringify(req.body)}`);
-  }
+  console.log(`  From : ${req.ip || req.socket.remoteAddress}`);
+  console.log(`  Type : ${req.headers['content-type'] || 'none'}`);
   next();
 });
 
 // ============================================================
-// MIDDLEWARE
+// BODY PARSERS + CORS
 // ============================================================
 app.use(express.json());
 app.use(express.text());
@@ -761,16 +740,14 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  if (req.method === 'OPTIONS') {
-    console.log('  [CORS] Preflight approved');
-    return res.sendStatus(200);
-  }
+  if (req.method === 'OPTIONS') { console.log('  [CORS] preflight OK'); return res.sendStatus(200); }
   next();
 });
 
 // ============================================================
-// SERVE FRONTEND
+// SERVE FRONTEND  ← index.html is in the PROJECT ROOT
 // ============================================================
+
 app.get('/', (req, res) => {
   const filePath = path.join(__dirname, 'frontend', 'index.html');
   console.log(`  [FRONTEND] Serving: ${filePath}`);
@@ -783,58 +760,49 @@ app.get('/', (req, res) => {
   });
 });
 
-// Suppress favicon 404 noise
 app.get('/favicon.ico', (req, res) => res.sendStatus(204));
 
 // ============================================================
-// PING — connection + HTTPS test
+// PING
 // ============================================================
 app.get('/api/ping', (req, res) => {
-  console.log('  [PING] Success — connection confirmed over HTTPS');
-  res.json({
-    status: 'online',
-    message: 'HTTPS connection confirmed! Camera access now available.',
-    ip: localIP,
-    port: PORT,
-    protocol: 'https'
-  });
+  console.log('  [PING] ✅ connection confirmed');
+  res.json({ status: 'online', message: 'HTTPS confirmed — camera enabled', ip: localIP, port: PORT });
 });
 
 // ============================================================
 // INVENTORY
 // ============================================================
 app.get('/api/inventory', (req, res) => {
-  console.log(`  [INVENTORY] GET — ${db.inventory.length} items`);
+  console.log(`  [INVENTORY GET] returning ${db.inventory.length} items`);
   res.json(db.inventory);
 });
 
 app.post('/api/inventory', (req, res) => {
-  console.log(`  [INVENTORY] POST — body:`, req.body);
-  const { barcode, name } = req.body;
-  if (!barcode || !name) {
-    console.log('  [INVENTORY] ERROR — missing barcode or name');
-    return res.status(400).json({ error: 'barcode and name are required' });
-  }
+  const { barcode, name } = req.body || {};
+  console.log(`  [INVENTORY POST] barcode="${barcode}" name="${name}"`);
+  if (!barcode || !name) return res.status(400).json({ error: 'barcode and name required' });
+
   const existing = db.inventory.find(i => i.barcode === barcode);
   if (existing) {
     existing.name = name;
     existing.updatedAt = new Date().toISOString();
-    console.log(`  [INVENTORY] Updated: "${name}" (${barcode})`);
+    console.log(`  [INVENTORY] updated "${name}"`);
     printDB();
     return res.json({ action: 'updated', item: existing });
   }
   const item = { id: `inv_${Date.now()}`, barcode, name, createdAt: new Date().toISOString() };
   db.inventory.unshift(item);
-  console.log(`  [INVENTORY] Added: "${name}" (${barcode})`);
+  console.log(`  [INVENTORY] added "${name}" (${barcode})`);
   printDB();
   res.status(201).json({ action: 'created', item });
 });
 
 app.delete('/api/inventory/:id', (req, res) => {
-  console.log(`  [INVENTORY] DELETE id: ${req.params.id}`);
-  const before = db.inventory.length;
+  console.log(`  [INVENTORY DELETE] id=${req.params.id}`);
+  const len = db.inventory.length;
   db.inventory = db.inventory.filter(i => i.id !== req.params.id);
-  if (db.inventory.length === before) return res.status(404).json({ error: 'Not found' });
+  if (db.inventory.length === len) return res.status(404).json({ error: 'not found' });
   printDB();
   res.json({ status: 'deleted' });
 });
@@ -843,120 +811,128 @@ app.delete('/api/inventory/:id', (req, res) => {
 // PURCHASES
 // ============================================================
 app.get('/api/purchases', (req, res) => {
-  console.log(`  [PURCHASES] GET — ${db.purchases.length} entries`);
+  console.log(`  [PURCHASES GET] returning ${db.purchases.length} entries`);
   res.json(db.purchases);
 });
 
 app.post('/api/purchases', (req, res) => {
-  console.log(`  [PURCHASES] POST — body:`, req.body);
-  const { barcode, name } = req.body;
-  if (!barcode || !name) {
-    console.log('  [PURCHASES] ERROR — missing barcode or name');
-    return res.status(400).json({ error: 'barcode and name are required' });
-  }
+  const { barcode, name } = req.body || {};
+  console.log(`  [PURCHASES POST] barcode="${barcode}" name="${name}"`);
+  if (!barcode || !name) return res.status(400).json({ error: 'barcode and name required' });
+
   const entry = { id: `pur_${Date.now()}`, barcode, name, loggedAt: new Date().toISOString() };
   db.purchases.unshift(entry);
+
   if (!db.inventory.find(i => i.barcode === barcode)) {
     db.inventory.unshift({ id: `inv_${Date.now()}`, barcode, name, createdAt: new Date().toISOString() });
-    console.log(`  [PURCHASES] Auto-added to inventory: "${name}"`);
+    console.log(`  [PURCHASES] auto-added to inventory: "${name}"`);
   }
-  console.log(`  [PURCHASES] Logged: "${name}" (${barcode})`);
+  console.log(`  [PURCHASES] logged "${name}" (${barcode})`);
   printDB();
   res.status(201).json({ action: 'logged', entry });
 });
 
 app.delete('/api/purchases/:id', (req, res) => {
-  console.log(`  [PURCHASES] DELETE id: ${req.params.id}`);
-  const before = db.purchases.length;
+  console.log(`  [PURCHASES DELETE] id=${req.params.id}`);
+  const len = db.purchases.length;
   db.purchases = db.purchases.filter(i => i.id !== req.params.id);
-  if (db.purchases.length === before) return res.status(404).json({ error: 'Not found' });
+  if (db.purchases.length === len) return res.status(404).json({ error: 'not found' });
   printDB();
   res.json({ status: 'deleted' });
 });
 
 // ============================================================
-// SCANS
+// SCANS  — raw scan events with device info
 // ============================================================
 app.get('/api/scans', (req, res) => {
-  console.log(`  [SCANS] GET — ${db.scans.length} events`);
+  console.log(`  [SCANS GET] returning ${db.scans.length} events`);
   res.json(db.scans);
 });
 
 app.post('/api/scans', (req, res) => {
-  console.log(`  [SCANS] POST — body:`, req.body);
-  const { barcode } = req.body;
+  const { barcode, camera, device } = req.body || {};
+  console.log(`  [SCANS POST] barcode="${barcode}" camera="${camera || 'unknown'}" device="${device || 'unknown'}"`);
   if (!barcode) return res.status(400).json({ error: 'barcode required' });
-  const scan = { id: `scan_${Date.now()}`, barcode, scannedAt: new Date().toISOString() };
+
+  const scan = {
+    id:        `scan_${Date.now()}`,
+    barcode,
+    camera:    camera  || 'unknown',   // 'front' or 'back'
+    device:    device  || 'unknown',   // user-agent or custom label
+    scannedAt: new Date().toISOString()
+  };
   db.scans.unshift(scan);
-  console.log(`  [SCANS] Recorded: ${barcode}`);
+  console.log(`  [SCANS] recorded barcode=${barcode} via ${scan.camera} camera`);
+  printDB();
   res.status(201).json(scan);
 });
 
+app.delete('/api/scans', (req, res) => {
+  console.log('  [SCANS] clearing all scan events');
+  db.scans = [];
+  res.json({ status: 'cleared' });
+});
+
 // ============================================================
-// FULL DB
+// FULL DB SNAPSHOT
 // ============================================================
 app.get('/api/db', (req, res) => {
-  console.log('  [DB] Snapshot requested');
+  console.log('  [DB] snapshot requested');
   res.json(db);
 });
 
 app.delete('/api/db', (req, res) => {
-  console.log('  [DB] Clearing all data');
+  console.log('  [DB] full clear');
   db = { inventory: [], purchases: [], scans: [] };
   res.json({ status: 'cleared' });
 });
 
 // ============================================================
-// 404 + ERROR
+// 404 + 500
 // ============================================================
 app.use((req, res) => {
   console.log(`  [404] ${req.method} ${req.url}`);
-  res.status(404).json({ error: `Route "${req.url}" not found` });
+  res.status(404).json({ error: `no route: ${req.method} ${req.url}` });
 });
 
 app.use((err, req, res, next) => {
-  console.log(`  [500] ${err.message}`);
+  console.log(`  [500] ${err.message}\n${err.stack}`);
   res.status(500).json({ error: err.message });
 });
 
 // ============================================================
-// START — HTTPS using self-signed cert
+// START HTTPS
 // ============================================================
 const certPath = path.join(__dirname, 'certs', 'cert.pem');
 const keyPath  = path.join(__dirname, 'certs', 'key.pem');
 
 if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-  console.log('\n[ERROR] SSL certificates not found!');
-  console.log('  Expected:');
-  console.log(`    ${certPath}`);
-  console.log(`    ${keyPath}`);
-  console.log('\n  Run this command in your project folder to generate them:');
+  console.log('\n[FATAL] SSL certs not found. Run from your project folder:');
+  console.log('  mkdir certs');
   console.log('  openssl req -x509 -newkey rsa:2048 -keyout certs/key.pem -out certs/cert.pem -days 365 -nodes -subj "/CN=192.168.1.121"');
-  console.log('\n  Then restart: node localserver.js\n');
   process.exit(1);
 }
 
-const sslOptions = {
-  key:  fs.readFileSync(keyPath),
-  cert: fs.readFileSync(certPath)
-};
+https.createServer({ key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }, app)
+  .listen(PORT, HOST, () => {
+    console.log('\n' + '='.repeat(55));
+    console.log('  SERVER LIVE — HTTPS — camera scanning enabled');
+    console.log(`  Local  : https://localhost:${PORT}`);
+    console.log(`  Network: https://${localIP}:${PORT}  ← phone URL`);
+    console.log('='.repeat(55));
+    console.log('  First time on phone: tap Advanced → Proceed to site\n');
+  });
 
-https.createServer(sslOptions, app).listen(PORT, HOST, () => {
-  console.log('\n' + '='.repeat(55));
-  console.log('  SERVER LIVE (HTTPS — camera access enabled)');
-  console.log(`  Local:   https://localhost:${PORT}`);
-  console.log(`  Network: https://${localIP}:${PORT}  <- type this on your phone`);
-  console.log('='.repeat(55));
-  console.log('\n  IMPORTANT — first time on phone:');
-  console.log('  Your browser will show a security warning.');
-  console.log('  Tap "Advanced" then "Proceed to site" to continue.');
-  console.log('  This is normal for self-signed certs on local networks.\n');
-});
-
+// ============================================================
+// DB PRINTER
+// ============================================================
 function printDB() {
-  console.log('\n  --- DB STATE ---');
-  console.log(`  Inventory: ${db.inventory.length} | Purchases: ${db.purchases.length} | Scans: ${db.scans.length}`);
-  db.inventory.slice(0, 3).forEach(i => console.log(`    INV: ${i.name} (${i.barcode})`));
-  db.purchases.slice(0, 3).forEach(p => console.log(`    PUR: ${p.name}`));
-  console.log('  ----------------\n');
+  console.log('  ── DB ──────────────────────────────────────');
+  console.log(`  inventory : ${db.inventory.length} items`);
+  db.inventory.slice(0,5).forEach(i => console.log(`    • ${i.name} [${i.barcode}]`));
+  console.log(`  purchases : ${db.purchases.length} entries`);
+  db.purchases.slice(0,5).forEach(p => console.log(`    • ${p.name} @ ${p.loggedAt}`));
+  console.log(`  scans     : ${db.scans.length} events`);
+  db.scans.slice(0,5).forEach(s => console.log(`    • ${s.barcode} via ${s.camera} @ ${s.scannedAt}`));
+  console.log('  ────────────────────────────────────────────');
 }

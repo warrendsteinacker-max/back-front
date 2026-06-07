@@ -5,3 +5,331 @@ note could get phone to connect to my computer usb port via its cahrging end and
 
 
 NOTE thinking about making a server to conect via blue tooth
+
+
+
+
+
+
+
+
+/////cluad http
+
+
+<!-- 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Item Tracker</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0; padding: 16px;
+      background: #f4f6f9; color: #333;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    h1 { margin-bottom: 8px; }
+    h2 { margin: 0 0 10px; }
+    .container {
+      width: 100%; max-width: 600px;
+      background: white; padding: 18px;
+      border-radius: 8px; margin-bottom: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+    }
+    #reader { width: 100%; background: #fafafa; border: 2px dashed #ccc; border-radius: 6px; }
+    button {
+      background: #007bff; color: white; border: none;
+      padding: 10px 14px; font-size: 1rem; border-radius: 4px;
+      cursor: pointer; width: 100%; margin-top: 8px;
+    }
+    button:hover { background: #0056b3; }
+    .btn-green { background: #28a745; } .btn-green:hover { background: #218838; }
+    .btn-purple { background: #6f42c1; } .btn-purple:hover { background: #5a32a3; }
+    .btn-yellow { background: #ffc107; color: #212529; font-weight: bold; }
+    .btn-yellow:hover { background: #e0a800; }
+    .btn-red { background: #dc3545; margin-top: 4px; padding: 5px 10px; font-size: 0.82rem; width: auto; }
+    .btn-red:hover { background: #c82333; }
+    .btn-gray { background: #6c757d; } .btn-gray:hover { background: #545b62; }
+    input, select { width: 100%; padding: 9px; margin: 6px 0; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    .action-box { background: #e9ecef; padding: 14px; border-radius: 6px; margin-top: 12px; border-left: 5px solid #007bff; }
+    .flex { display: flex; gap: 8px; }
+    .item-list { list-style: none; padding: 0; margin: 0; }
+    .item-card {
+      background: #f8f9fa; padding: 11px; border-radius: 4px;
+      margin-bottom: 7px; display: flex; justify-content: space-between;
+      align-items: center; border: 1px solid #e2e8f0;
+    }
+    .hidden { display: none; }
+    #status-bar {
+      padding: 11px; margin-bottom: 14px; border-radius: 4px;
+      font-weight: bold; font-size: 0.9rem; text-align: center;
+      width: 100%; max-width: 600px;
+      background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db;
+    }
+    .section-border-yellow { border-top: 4px solid #ffc107; }
+    .section-border-teal   { border-left: 5px solid #17a2b8; }
+    .section-border-purple { border-left: 5px solid #6f42c1; }
+    .section-border-gray   { border-left: 5px solid #6c757d; }
+    small { color: #888; font-size: 0.78rem; }
+  </style>
+</head>
+<body>
+
+<h1>📦 Local Item Tracker</h1>
+<div id="status-bar">Status unknown — tap the ping test below.</div>
+
+<!-- SECTION 0: NETWORK TEST -->
+<div class="container section-border-yellow">
+  <h2>0. Network Test</h2>
+  <p style="font-size:0.85rem;color:#666;margin:0;">Tap to verify your phone can reach the server.</p>
+  <button class="btn-yellow" onclick="pingTest()">⚡ Test Connection to Server</button>
+</div>
+
+<!-- SECTION 1: SCANNER -->
+<div class="container">
+  <h2>1. Barcode Scanner</h2>
+  <div id="reader" class="hidden"></div>
+  <button id="scan-btn" onclick="toggleScanner()">▶ Start Scanner</button>
+
+  <div id="action-box" class="action-box hidden">
+    <strong>Scanned: <span id="scanned-code" style="color:#007bff"></span></strong>
+    <input type="text" id="item-name" placeholder="Item name (e.g. Planters Peanuts 16oz)">
+    <div class="flex">
+      <button class="btn-green" onclick="saveItem('inventory')">Add to Inventory</button>
+      <button class="btn-purple" onclick="saveItem('purchase')">Log as Purchase</button>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 2: QUICK SELECT -->
+<div class="container section-border-gray">
+  <h2>2. Quick Purchase Log</h2>
+  <p style="font-size:0.85rem;color:#666;margin:0 0 8px;">Pick an existing inventory item to log a purchase without scanning.</p>
+  <select id="quick-select"><option value="">-- Select item --</option></select>
+  <button class="btn-green" onclick="quickPurchase()">Log as Purchase</button>
+</div>
+
+<!-- SECTION 3: INVENTORY LIST -->
+<div class="container section-border-teal">
+  <h2>3. Master Inventory</h2>
+  <input type="text" id="search" oninput="renderAll()" placeholder="Search by name or barcode...">
+  <ul id="inv-list" class="item-list"></ul>
+</div>
+
+<!-- SECTION 4: PURCHASE LOG -->
+<div class="container section-border-purple">
+  <h2>4. Purchase Log</h2>
+  <ul id="pur-list" class="item-list"></ul>
+</div>
+
+<!-- SECTION 5: DB SNAPSHOT -->
+<div class="container" style="border-left:5px solid #17a2b8">
+  <h2>5. Live DB Snapshot</h2>
+  <button class="btn-gray" onclick="loadFromServer()">🔄 Refresh from Server</button>
+  <button class="btn-red" style="width:100%;margin-top:6px" onclick="clearDB()">🧹 Clear Entire DB</button>
+  <pre id="db-snapshot" style="font-size:0.72rem;overflow:auto;max-height:200px;background:#1e1e1e;color:#9cdcfe;padding:10px;border-radius:4px;margin-top:10px"></pre>
+</div>
+
+<script>
+  // ── STATE (mirrors server DB in memory) ──────────────────────────
+  let inventory = [];
+  let purchases = [];
+
+  let scanner = null;
+  let currentBarcode = '';
+
+  // ── UTILITIES ────────────────────────────────────────────────────
+  function setStatus(msg, type = 'neutral') {
+    const el = document.getElementById('status-bar');
+    el.innerText = msg;
+    const styles = {
+      ok:      { bg: '#d4edda', color: '#155724', border: '#c3e6cb' },
+      error:   { bg: '#f8d7da', color: '#721c24', border: '#f5c6cb' },
+      loading: { bg: '#fff3cd', color: '#856404', border: '#ffeeba' },
+      neutral: { bg: '#e2e3e5', color: '#383d41', border: '#d6d8db' }
+    };
+    const s = styles[type] || styles.neutral;
+    el.style.background = s.bg;
+    el.style.color = s.color;
+    el.style.border = `1px solid ${s.border}`;
+  }
+
+  async function api(method, endpoint, body) {
+    const opts = { method, headers: {} };
+    if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    const res = await fetch(endpoint, opts);
+    return res.json();
+  }
+
+  // ── PING ─────────────────────────────────────────────────────────
+  async function pingTest() {
+    setStatus('Pinging server...', 'loading');
+    const t = Date.now();
+    try {
+      const data = await api('GET', '/api/ping');
+      setStatus(`✅ Connected! Server responded in ${Date.now()-t}ms.`, 'ok');
+      await loadFromServer();
+    } catch(e) {
+      setStatus('❌ Failed. Check: same Wi-Fi? Cellular data off? Firewall open on port 3000?', 'error');
+    }
+  }
+
+  // ── LOAD ALL DATA FROM SERVER ────────────────────────────────────
+  async function loadFromServer() {
+    try {
+      const data = await api('GET', '/api/db');
+      inventory = data.inventory || [];
+      purchases = data.purchases || [];
+      document.getElementById('db-snapshot').textContent = JSON.stringify(data, null, 2);
+      renderAll();
+    } catch(e) {
+      console.error('Could not load from server:', e);
+    }
+  }
+
+  // ── SCANNER ──────────────────────────────────────────────────────
+  function toggleScanner() {
+    const reader = document.getElementById('reader');
+    const btn = document.getElementById('scan-btn');
+    if (!scanner) {
+      reader.classList.remove('hidden');
+      btn.innerText = '⏹ Stop Scanner';
+      scanner = new Html5QrcodeScanner('reader', { fps: 10, qrbox: { width: 260, height: 160 } }, false);
+      scanner.render(onScanSuccess, () => {});
+    } else {
+      stopScanner();
+    }
+  }
+
+  function stopScanner() {
+    if (scanner) {
+      scanner.clear().catch(() => {});
+      scanner = null;
+      document.getElementById('reader').classList.add('hidden');
+      document.getElementById('scan-btn').innerText = '▶ Start Scanner';
+    }
+  }
+
+  async function onScanSuccess(code) {
+    stopScanner();
+    currentBarcode = code;
+    document.getElementById('scanned-code').innerText = code;
+
+    // Log raw scan to server
+    await api('POST', '/api/scans', { barcode: code });
+
+    // Try to auto-fill name from existing inventory
+    const match = inventory.find(i => i.barcode === code);
+    document.getElementById('item-name').value = match ? match.name : '';
+    document.getElementById('action-box').classList.remove('hidden');
+  }
+
+  // ── SAVE ITEM (from scanner action box) ─────────────────────────
+  async function saveItem(target) {
+    const rawName = document.getElementById('item-name').value.trim();
+    const name = rawName || `Item ${currentBarcode}`;
+    setStatus('Saving...', 'loading');
+    try {
+      if (target === 'inventory') {
+        const res = await api('POST', '/api/inventory', { barcode: currentBarcode, name });
+        setStatus(`✅ "${name}" saved to inventory.`, 'ok');
+      } else {
+        const res = await api('POST', '/api/purchases', { barcode: currentBarcode, name });
+        setStatus(`✅ "${name}" logged as purchase.`, 'ok');
+      }
+      document.getElementById('action-box').classList.add('hidden');
+      document.getElementById('item-name').value = '';
+      currentBarcode = '';
+      await loadFromServer();
+    } catch(e) {
+      setStatus('❌ Save failed. Is the server running?', 'error');
+    }
+  }
+
+  // ── QUICK PURCHASE (from dropdown) ──────────────────────────────
+  async function quickPurchase() {
+    const sel = document.getElementById('quick-select');
+    const id = sel.value;
+    if (!id) return;
+    const item = inventory.find(i => i.id === id);
+    if (!item) return;
+    setStatus('Logging purchase...', 'loading');
+    try {
+      await api('POST', '/api/purchases', { barcode: item.barcode, name: item.name });
+      setStatus(`✅ "${item.name}" logged as purchase.`, 'ok');
+      await loadFromServer();
+    } catch(e) {
+      setStatus('❌ Failed to log purchase.', 'error');
+    }
+  }
+
+  // ── DELETE ───────────────────────────────────────────────────────
+  async function deleteItem(id, type) {
+    const endpoint = type === 'inventory' ? `/api/inventory/${id}` : `/api/purchases/${id}`;
+    try {
+      await api('DELETE', endpoint);
+      await loadFromServer();
+    } catch(e) {
+      setStatus('❌ Delete failed.', 'error');
+    }
+  }
+
+  // ── CLEAR ENTIRE DB ──────────────────────────────────────────────
+  async function clearDB() {
+    if (!confirm('Clear the entire server database? This cannot be undone.')) return;
+    await api('DELETE', '/api/db');
+    await loadFromServer();
+    setStatus('🧹 Database cleared.', 'neutral');
+  }
+
+  // ── RENDER LISTS ─────────────────────────────────────────────────
+  function renderAll() {
+    const q = document.getElementById('search').value.toLowerCase();
+
+    // Inventory list
+    const invEl = document.getElementById('inv-list');
+    const filtInv = inventory.filter(i => i.name.toLowerCase().includes(q) || i.barcode.includes(q));
+    invEl.innerHTML = filtInv.length === 0
+      ? '<li style="color:#888;font-size:0.9rem;padding:5px">No items.</li>'
+      : filtInv.map(i => `
+          <li class="item-card">
+            <div>
+              <strong>${i.name}</strong><br>
+              <small>Barcode: ${i.barcode} | Added: ${i.createdAt ? new Date(i.createdAt).toLocaleString() : '—'}</small>
+            </div>
+            <button class="btn-red" onclick="deleteItem('${i.id}','inventory')">Remove</button>
+          </li>`).join('');
+
+    // Purchases list
+    const purEl = document.getElementById('pur-list');
+    const filtPur = purchases.filter(i => i.name.toLowerCase().includes(q) || i.barcode.includes(q));
+    purEl.innerHTML = filtPur.length === 0
+      ? '<li style="color:#888;font-size:0.9rem;padding:5px">No purchases.</li>'
+      : filtPur.map(i => `
+          <li class="item-card" style="border-left:4px solid #6f42c1">
+            <div>
+              <strong>${i.name}</strong><br>
+              <small>Logged: ${i.loggedAt ? new Date(i.loggedAt).toLocaleString() : '—'}</small>
+            </div>
+            <button class="btn-red" onclick="deleteItem('${i.id}','purchase')">Delete</button>
+          </li>`).join('');
+
+    // Quick select dropdown
+    const sel = document.getElementById('quick-select');
+    sel.innerHTML = inventory.length === 0
+      ? '<option value="">-- No inventory items --</option>'
+      : inventory.map(i => `<option value="${i.id}">${i.name} (${i.barcode})</option>`).join('');
+  }
+
+  // ── INIT ─────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    // Try to auto-load if page was served from the Node server
+    loadFromServer().catch(() => {});
+  });
+</script>
+</body>
+</html> -->
