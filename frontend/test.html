@@ -453,6 +453,8 @@
         button:hover { background-color: #0056b3; }
         button.secondary { background-color: #28a745; }
         button.secondary:hover { background-color: #218838; }
+        button.action-snap { background-color: #ffc107; color: #212529; font-size: 1.2rem; padding: 15px; margin-top: 10px; }
+        button.action-snap:hover { background-color: #e0a800; }
         button.danger { background-color: #dc3545; margin-top: 0; padding: 6px 10px; font-size: 0.85rem; width: auto;}
         button.danger:hover { background-color: #c82333; }
         
@@ -476,10 +478,12 @@
             font-size: 0.9rem; 
             padding: 10px; 
             background-color: #6c757d; 
+            margin-top: 0;
         }
         .cam-active { 
             background-color: #0056b3 !important; 
             outline: 3px solid #ffc107; 
+            color: white !important;
         }
         .item-list {
             list-style: none;
@@ -522,15 +526,16 @@
         <h2>1. Camera Scanner</h2>
         
         <div class="cam-row">
-            <button id="btn-front" onclick="selectCamera('user')">🤳 Front Camera</button>
-            <button id="btn-back" class="cam-active" onclick="selectCamera('environment')">🔙 Back Camera</button>
+            <button id="btn-front" onclick="selectCamera('user')">🔬 Front Camera</button>
+            <button id="btn-back" class="cam-active" onclick="selectCamera('environment')">📷 Back Camera</button>
         </div>
+
+        <button id="view-btn" onclick="toggleCameraView()">Turn Camera Stream ON</button>
 
         <div id="reader-container" class="hidden">
             <div id="reader"></div>
+            <button id="snap-btn" class="action-snap" onclick="executeManualScan()">🎯 SNAP & SCAN BARCODE NOW</button>
         </div>
-        
-        <button id="scan-btn" onclick="toggleScanner()">Start Scanner (Continuous Auto-Send)</button>
     </div>
 
     <div class="container" style="border-left: 5px solid #6c757d;">
@@ -556,43 +561,36 @@
     </div>
 
     <script>
-        // Server routing base context config (Relative routes work automatically since it serves this file)
         const API_BASE = window.location.origin;
 
-        // Global arrays synced directly from database streams
         let inventoryItems = [];
         let purchasedLog = [];
         
         let html5Qrcode = null; 
-        let scannerRunning = false;
+        let cameraStreaming = false;
         let currentCamera = 'environment'; 
-        let lastScannedBarcode = "";
-        let scanThrottleTimeout = null;
 
         // --- FETCH SYNC PIPELINES FROM EXPRESS BACKEND ---
         async function loadDataFromBackend() {
             try {
-                // Confirm server operational ping status
                 const pingRes = await fetch(`${API_BASE}/api/ping`);
                 if (pingRes.ok) {
                     const pingData = await pingRes.json();
-                    document.getElementById('api-status').innerHTML = `✅ Connected to <b>${pingData.ip}:${pingData.port}</b> via HTTPS. System Armed.`;
+                    document.getElementById('api-status').innerHTML = `✅ Connected to <b>${pingData.ip}:${pingData.port}</b> via HTTPS. App Armed.`;
                     document.getElementById('api-status').style.backgroundColor = "#d4edda";
                     document.getElementById('api-status').style.color = "#155724";
                 }
 
-                // Hydrate live inventory array
                 const invRes = await fetch(`${API_BASE}/api/inventory`);
                 if (invRes.ok) inventoryItems = await invRes.json();
 
-                // Hydrate live purchase log array
                 const purRes = await fetch(`${API_BASE}/api/purchases`);
                 if (purRes.ok) purchasedLog = await purRes.json();
 
                 renderLists();
             } catch (err) {
-                console.error("Database initialization connection failure: ", err);
-                document.getElementById('api-status').innerText = "❌ Connection Failed. Check server log outputs.";
+                console.error("Database connection failure: ", err);
+                document.getElementById('api-status').innerText = "❌ Connection Failed. Check server terminal logs.";
                 document.getElementById('api-status').style.backgroundColor = "#f8d7da";
                 document.getElementById('api-status').style.color = "#721c24";
             }
@@ -606,51 +604,52 @@
             document.getElementById('btn-front').classList.toggle('cam-active', facingMode === 'user');
             document.getElementById('btn-back').classList.toggle('cam-active', facingMode === 'environment');
 
-            if (scannerRunning) {
-                await stopScannerInternal();
-                startScannerInternal();
+            if (cameraStreaming) {
+                await stopCameraStream();
+                startCameraStream();
             }
         }
 
-        // --- SCANNER MECHANICS ENGINE ---
-        async function toggleScanner() {
-            if (scannerRunning) {
-                await stopScannerInternal();
+        // --- CAMERA STREAM INITIALIZER ---
+        async function toggleCameraView() {
+            if (cameraStreaming) {
+                await stopCameraStream();
             } else {
-                startScannerInternal();
+                startCameraStream();
             }
         }
 
-        function startScannerInternal() {
+        function startCameraStream() {
             const containerDiv = document.getElementById('reader-container');
-            const scanBtn = document.getElementById('scan-btn');
+            const viewBtn = document.getElementById('view-btn');
 
             containerDiv.classList.remove('hidden');
-            scanBtn.innerText = "Stop Scanner Process";
-            scanBtn.style.backgroundColor = "#6c757d";
-            scannerRunning = true;
+            viewBtn.innerText = "Turn Camera Stream OFF";
+            viewBtn.style.backgroundColor = "#6c757d";
+            cameraStreaming = true;
 
             html5Qrcode = new Html5Qrcode("reader");
 
             const config = { 
-                fps: 15, 
+                fps: 20, // Keep stream smooth on video feed
                 qrbox: { width: 260, height: 160 }
             };
 
+            // Start the view feed, but ignore the continuous scan callback loop
             html5Qrcode.start(
                 { facingMode: currentCamera }, 
                 config, 
-                onScanSuccess, 
-                onScanFailure
+                () => {}, // Leaving continuous success handler EMPTY on purpose
+                () => {}  // Leaving continuous failure handler EMPTY on purpose
             ).catch(err => {
                 console.error("Camera thread access error: ", err);
-                stopScannerInternal();
+                stopCameraStream();
             });
         }
 
-        async function stopScannerInternal() {
+        async function stopCameraStream() {
             if (!html5Qrcode) {
-                scannerRunning = false;
+                cameraStreaming = false;
                 return;
             }
 
@@ -659,53 +658,63 @@
                     await html5Qrcode.stop();
                 }
             } catch (err) {
-                console.error("Video breakdown tracking error: ", err);
+                console.error("Video breakdown stream error: ", err);
             } finally {
                 html5Qrcode = null;
-                scannerRunning = false;
+                cameraStreaming = false;
                 document.getElementById('reader-container').classList.add('hidden');
-                const scanBtn = document.getElementById('scan-btn');
-                scanBtn.innerText = "Start Scanner (Continuous Auto-Send)";
-                scanBtn.style.backgroundColor = "#007bff";
+                const viewBtn = document.getElementById('view-btn');
+                viewBtn.innerText = "Turn Camera Stream ON";
+                viewBtn.style.backgroundColor = "#007bff";
             }
         }
 
-        // --- AUTOMATED BACKGROUND TRANSMISSION LOOP ---
-        async function onScanSuccess(decodedText, decodedResult) {
-            // Anti-bounce filter: Avoid double hitting the same item code multiple times within 3 seconds
-            if (lastScannedBarcode === decodedText) return;
-            
-            lastScannedBarcode = decodedText;
-            clearTimeout(scanThrottleTimeout);
-            scanThrottleTimeout = setTimeout(() => { lastScannedBarcode = ""; }, 3000);
+        // --- MANUALLY TRIGGERED SNAPSHOT SCAN & POST PIPELINE ---
+        async function executeManualScan() {
+            if (!html5Qrcode || !html5Qrcode.isScanning) {
+                alert("Camera stream must be active first!");
+                return;
+            }
 
-            // Audio-visual confirmation alerts directly onto screen button canvas layout
-            const scanBtn = document.getElementById('scan-btn');
-            const originalColor = scanBtn.style.backgroundColor;
-            scanBtn.innerText = `⚡ Auto-Transmitting: ${decodedText}`;
-            scanBtn.style.backgroundColor = "#28a745";
+            const snapBtn = document.getElementById('snap-btn');
+            snapBtn.innerText = "⏳ SCANNING FRAME...";
+            snapBtn.style.backgroundColor = "#ffc107";
 
-            // Local lookup to check if a specific structural name template has been initialized
-            const knownMatch = inventoryItems.find(i => i.barcode === decodedText);
-            const itemName = knownMatch ? knownMatch.name : `Barcode item ${decodedText}`;
-
-            // Build payloads tracking data matches
-            const purchasePayload = { barcode: decodedText, name: itemName };
-            const scanPayload = { 
-                barcode: decodedText, 
-                camera: currentCamera === 'environment' ? 'back' : 'front',
-                device: navigator.userAgent
-            };
+            // Find the active internal video canvas context layer rendered by the library
+            const videoElement = document.querySelector('#reader video');
+            if (!videoElement) {
+                alert("Video frame element could not be verified in the DOM.");
+                snapBtn.innerText = "🎯 SNAP & SCAN BARCODE NOW";
+                return;
+            }
 
             try {
-                // 1. Post to Scans route endpoint
+                // Pass the direct, live canvas image track into the engine for a single barcode decoding attempt
+                const decodedText = await html5Qrcode.scanFile(videoElement);
+                
+                console.log(`🎯 Barcode Found on Button Click: ${decodedText}`);
+                snapBtn.innerText = `✅ FOUND: ${decodedText}`;
+                snapBtn.style.backgroundColor = "#28a745";
+
+                // Resolve names locally using current local db configuration copy
+                const knownMatch = inventoryItems.find(i => i.barcode === decodedText);
+                const itemName = knownMatch ? knownMatch.name : `Barcode item ${decodedText}`;
+
+                // Structure complete server JSON structures
+                const purchasePayload = { barcode: decodedText, name: itemName };
+                const scanPayload = { 
+                    barcode: decodedText, 
+                    camera: currentCamera === 'environment' ? 'back' : 'front',
+                    device: navigator.userAgent
+                };
+
+                // Stream requests down API endpoint corridors
                 await fetch(`${API_BASE}/api/scans`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(scanPayload)
                 });
 
-                // 2. Post to Purchases route endpoint 
                 const purResponse = await fetch(`${API_BASE}/api/purchases`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -713,26 +722,25 @@
                 });
 
                 if (purResponse.ok) {
-                    console.log(`[AUTO-TRANSMIT] Successfully processed item: ${decodedText}`);
-                    // Pull updated definitions instantly from memory tables
+                    // Instantly sync tables up so user interface additions render down immediately
                     await loadDataFromBackend();
                 }
+
             } catch (err) {
-                console.error("Background asynchronous request transmission crash: ", err);
-                scanBtn.innerText = "🚨 Transmission Connection Error!";
-                scanBtn.style.backgroundColor = "#dc3545";
+                // Occurs if the button was clicked but no recognizable barcode was found in that specific frame
+                console.warn("Barcode match validation structural check failed on frame capture target.", err);
+                snapBtn.innerText = "❌ NO BARCODE SEEN. TRY AGAIN.";
+                snapBtn.style.backgroundColor = "#dc3545";
             } finally {
-                // Reset display styles back gracefully without breaking stream channel tracking loops
+                // Return button back to active state after a brief visual delay
                 setTimeout(() => {
-                    if (scannerRunning && scanBtn) {
-                        scanBtn.innerText = "Stop Scanner Process";
-                        scanBtn.style.backgroundColor = "#6c757d";
+                    if (snapBtn) {
+                        snapBtn.innerText = "🎯 SNAP & SCAN BARCODE NOW";
+                        snapBtn.style.backgroundColor = "#ffc107";
                     }
-                }, 1500);
+                }, 2000);
             }
         }
-
-        function onScanFailure(error) { /* Inline loop noise capture bypass */ }
 
         // --- QUICK SELECT DIRECT ROUTER ---
         async function purchaseFromSelect() {
@@ -779,7 +787,6 @@
             const purchasedUI = document.getElementById('purchased-ui-list');
             const selectUI = document.getElementById('quick-inventory-select');
 
-            // 1. Process Master Inventory List
             inventoryUI.innerHTML = "";
             const filteredInventory = inventoryItems.filter(item => 
                 item.name.toLowerCase().includes(searchQuery) || item.barcode.includes(searchQuery)
@@ -800,7 +807,6 @@
                 });
             }
 
-            // 2. Process Purchase History Logs
             purchasedUI.innerHTML = "";
             const filteredPurchases = purchasedLog.filter(item => 
                 item.name.toLowerCase().includes(searchQuery) || item.barcode.includes(searchQuery)
@@ -822,7 +828,6 @@
                 });
             }
 
-            // 3. Re-hydrate Manual Form Selection Menu
             const selectedVal = selectUI.value;
             selectUI.innerHTML = inventoryItems.length === 0 
                 ? `<option value="">-- No registered inventory items --</option>`
@@ -830,7 +835,6 @@
             if (selectedVal) selectUI.value = selectedVal;
         }
 
-        // Initialize display configuration on DOM layout assembly completion
         document.addEventListener("DOMContentLoaded", loadDataFromBackend);
     </script>
 </body>
