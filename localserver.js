@@ -749,7 +749,7 @@ app.use((req, res, next) => {
 // ============================================================
 
 app.get('/', (req, res) => {
-  const filePath = path.join(__dirname, 'frontend', 'index.html');
+  const filePath = path.join(__dirname, 'frontend', 'test.html');
   console.log(`  [FRONTEND] Serving: ${filePath}`);
   res.sendFile(filePath, (err) => {
     if (err) {
