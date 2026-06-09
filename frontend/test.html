@@ -415,7 +415,7 @@
             flex-direction: column;
             align-items: center;
         }
-        h1, h2 { margin-bottom: 10px; }
+        h1, h2, h3 { margin-top: 0; margin-bottom: 10px; }
         .container {
             width: 100%;
             max-width: 600px;
@@ -424,32 +424,38 @@
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            box-sizing: border-box;
+        }
+        #reader-container {
+            width: 100%;
+            margin-top: 10px;
+            margin-bottom: 10px;
         }
         #reader {
             width: 100%;
             background: #fafafa;
             border: 2px dashed #ccc;
             border-radius: 6px;
-            min-height: 250px;
             overflow: hidden;
-            position: relative;
         }
         button {
             background-color: #007bff;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 12px 15px;
             font-size: 1rem;
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
-            margin-top: 10px;
+            margin-top: 5px;
+            font-weight: bold;
         }
         button:hover { background-color: #0056b3; }
         button.secondary { background-color: #28a745; }
         button.secondary:hover { background-color: #218838; }
-        button.danger { background-color: #dc3545; margin-top: 5px; padding: 5px 10px; font-size: 0.85rem;}
+        button.danger { background-color: #dc3545; margin-top: 0; padding: 6px 10px; font-size: 0.85rem; width: auto;}
         button.danger:hover { background-color: #c82333; }
+        
         input, select {
             width: 100%;
             padding: 10px;
@@ -457,22 +463,30 @@
             box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 4px;
+            font-size: 1rem;
         }
-        .modal-action-box {
-            background: #e9ecef;
-            padding: 15px;
-            border-radius: 6px;
-            margin-top: 15px;
-            border-left: 5px solid #007bff;
+        .cam-row { 
+            display: flex; 
+            gap: 10px; 
+            margin-bottom: 10px; 
+            width: 100%;
         }
-        .flex-buttons {
-            display: flex;
-            gap: 10px;
+        .cam-row button { 
+            flex: 1; 
+            font-size: 0.9rem; 
+            padding: 10px; 
+            background-color: #6c757d; 
+        }
+        .cam-active { 
+            background-color: #0056b3 !important; 
+            outline: 3px solid #ffc107; 
         }
         .item-list {
             list-style: none;
             padding: 0;
             margin: 0;
+            max-height: 250px;
+            overflow-y: auto;
         }
         .item-card {
             background: #f8f9fa;
@@ -484,81 +498,107 @@
             align-items: center;
             border: 1px solid #e2e8f0;
         }
-        .search-box {
-            border-left: 5px solid #17a2b8;
-        }
+        .search-box { border-left: 5px solid #17a2b8; }
         .hidden { display: none !important; }
-
-        /* Camera Selection Row Styles */
-        .cam-row { display: flex; gap: 8px; margin-top: 5px; margin-bottom: 5px; }
-        .cam-row button { flex: 1; font-size: 0.85rem; padding: 8px; background-color: #6c757d; }
-        .cam-active { background-color: #0056b3 !important; font-weight: bold; outline: 3px solid #ffc107; }
+        .status-banner {
+            background-color: #e2e8f0;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
 
     <h1>Local Item Tracker</h1>
+    <div id="api-status" class="status-banner">Connecting to secure server platform backend...</div>
 
     <div class="container">
-        <h2>1. Scanner</h2>
+        <h2>1. Camera Scanner</h2>
         
         <div class="cam-row">
             <button id="btn-front" onclick="selectCamera('user')">🤳 Front Camera</button>
             <button id="btn-back" class="cam-active" onclick="selectCamera('environment')">🔙 Back Camera</button>
         </div>
 
-        <div id="reader-container" class="hidden" style="margin-top: 10px;">
+        <div id="reader-container" class="hidden">
             <div id="reader"></div>
         </div>
         
-        <button id="scan-btn" onclick="toggleScanner()">Start Scanner (Single Scan Mode)</button>
-
-        <div id="action-box" class="modal-action-box hidden">
-            <h3>Scanned Barcode: <span id="scanned-code-text" style="color:#007bff;"></span></h3>
-            <label for="item-name">Item Identity Name:</label>
-            <input type="text" id="item-name" placeholder="e.g., Planters Peanuts 16oz">
-            
-            <div class="flex-buttons">
-                <button class="secondary" onclick="saveScannedItem('inventory')">Add to Master Inventory</button>
-                <button style="background-color: #6f42c1;" onclick="saveScannedItem('purchased')">Log Direct to Purchased</button>
-            </div>
-        </div>
+        <button id="scan-btn" onclick="toggleScanner()">Start Scanner (Continuous Auto-Send)</button>
     </div>
 
     <div class="container" style="border-left: 5px solid #6c757d;">
         <h2>2. Manual Selection Logging</h2>
-        <p style="font-size: 0.9rem; color:#666; margin: 0 0 10px 0;">Select an item from your local Master Inventory dictionary to quickly record a purchase without using the camera.</p>
-        <label for="quick-inventory-select">Choose Item from Inventory:</label>
+        <label for="quick-inventory-select">Choose Item from Master Inventory Dictionary:</label>
         <select id="quick-inventory-select">
-            <option value="">-- No items available --</option>
+            <option value="">-- Loading inventory options... --</option>
         </select>
         <button class="secondary" onclick="purchaseFromSelect()">Log Selected Item as Purchased</button>
     </div>
 
     <div class="container search-box">
         <h2>3. Master Inventory Search</h2>
-        <input type="text" id="search-input" onkeyup="renderLists()" placeholder="Type a name or scan-code to filter lists instantly...">
+        <input type="text" id="search-input" onkeyup="renderLists()" placeholder="Type item description or code to filter lists...">
         
-        <h3>Local Inventory List</h3>
+        <h3>Registered Dictionary Items</h3>
         <ul id="inventory-ui-list" class="item-list"></ul>
     </div>
 
     <div class="container" style="border-left: 5px solid #6f42c1;">
-        <h2>4. Purchased Log</h2>
+        <h2>4. Live Purchase Logs</h2>
         <ul id="purchased-ui-list" class="item-list"></ul>
     </div>
 
     <script>
-        // Local state hydration from browser client cache structures
-        let inventoryItems = JSON.parse(localStorage.getItem('inventoryItems')) || [];
-        let purchasedLog = JSON.parse(localStorage.getItem('purchasedLog')) || [];
-        
-        let html5Qrcode = null; // Changed to lower-level object handler
-        let scannerRunning = false;
-        let currentCamera = 'environment'; // Default target to the rear camera
-        let currentScannedBarcode = "";
+        // Server routing base context config (Relative routes work automatically since it serves this file)
+        const API_BASE = window.location.origin;
 
-        // --- DYNAMIC CAMERA HOT-SWAPPING SYSTEM ---
+        // Global arrays synced directly from database streams
+        let inventoryItems = [];
+        let purchasedLog = [];
+        
+        let html5Qrcode = null; 
+        let scannerRunning = false;
+        let currentCamera = 'environment'; 
+        let lastScannedBarcode = "";
+        let scanThrottleTimeout = null;
+
+        // --- FETCH SYNC PIPELINES FROM EXPRESS BACKEND ---
+        async function loadDataFromBackend() {
+            try {
+                // Confirm server operational ping status
+                const pingRes = await fetch(`${API_BASE}/api/ping`);
+                if (pingRes.ok) {
+                    const pingData = await pingRes.json();
+                    document.getElementById('api-status').innerHTML = `✅ Connected to <b>${pingData.ip}:${pingData.port}</b> via HTTPS. System Armed.`;
+                    document.getElementById('api-status').style.backgroundColor = "#d4edda";
+                    document.getElementById('api-status').style.color = "#155724";
+                }
+
+                // Hydrate live inventory array
+                const invRes = await fetch(`${API_BASE}/api/inventory`);
+                if (invRes.ok) inventoryItems = await invRes.json();
+
+                // Hydrate live purchase log array
+                const purRes = await fetch(`${API_BASE}/api/purchases`);
+                if (purRes.ok) purchasedLog = await purRes.json();
+
+                renderLists();
+            } catch (err) {
+                console.error("Database initialization connection failure: ", err);
+                document.getElementById('api-status').innerText = "❌ Connection Failed. Check server log outputs.";
+                document.getElementById('api-status').style.backgroundColor = "#f8d7da";
+                document.getElementById('api-status').style.color = "#721c24";
+            }
+        }
+
+        // --- CAMERA SELECT ROTATOR ---
         async function selectCamera(facingMode) {
             if (currentCamera === facingMode) return;
             
@@ -566,14 +606,13 @@
             document.getElementById('btn-front').classList.toggle('cam-active', facingMode === 'user');
             document.getElementById('btn-back').classList.toggle('cam-active', facingMode === 'environment');
 
-            // If the camera is already actively running, kill the stream track and reboot with the new target
             if (scannerRunning) {
                 await stopScannerInternal();
                 startScannerInternal();
             }
         }
 
-        // --- CAMERA SCANNER DRIVERS ---
+        // --- SCANNER MECHANICS ENGINE ---
         async function toggleScanner() {
             if (scannerRunning) {
                 await stopScannerInternal();
@@ -587,11 +626,10 @@
             const scanBtn = document.getElementById('scan-btn');
 
             containerDiv.classList.remove('hidden');
-            scanBtn.innerText = "Stop Scanner";
+            scanBtn.innerText = "Stop Scanner Process";
             scanBtn.style.backgroundColor = "#6c757d";
             scannerRunning = true;
 
-            // Instantiate native driver engine directly targeting our element id
             html5Qrcode = new Html5Qrcode("reader");
 
             const config = { 
@@ -605,7 +643,7 @@
                 onScanSuccess, 
                 onScanFailure
             ).catch(err => {
-                console.error("Camera thread hardware connection dropped: ", err);
+                console.error("Camera thread access error: ", err);
                 stopScannerInternal();
             });
         }
@@ -621,121 +659,119 @@
                     await html5Qrcode.stop();
                 }
             } catch (err) {
-                console.error("Error breaking down video channel: ", err);
+                console.error("Video breakdown tracking error: ", err);
             } finally {
                 html5Qrcode = null;
                 scannerRunning = false;
                 document.getElementById('reader-container').classList.add('hidden');
                 const scanBtn = document.getElementById('scan-btn');
-                scanBtn.innerText = "Start Scanner (Single Scan Mode)";
+                scanBtn.innerText = "Start Scanner (Continuous Auto-Send)";
                 scanBtn.style.backgroundColor = "#007bff";
             }
         }
 
-        // Wrapper to map to your existing click event structural names
-        function stopScanner() {
-            stopScannerInternal();
-        }
-
+        // --- AUTOMATED BACKGROUND TRANSMISSION LOOP ---
         async function onScanSuccess(decodedText, decodedResult) {
-            // Kill stream processing pipeline immediately on tracking match
-            await stopScannerInternal();
-
-            currentScannedBarcode = decodedText;
-            document.getElementById('scanned-code-text').innerText = decodedText;
+            // Anti-bounce filter: Avoid double hitting the same item code multiple times within 3 seconds
+            if (lastScannedBarcode === decodedText) return;
             
-            // LOCAL LOOKUP: Scan internal data maps
-            const matchedLocalItem = inventoryItems.find(item => item.barcode === decodedText) || 
-                                     purchasedLog.find(item => item.barcode === decodedText);
-            
-            // Auto-fill field values
-            document.getElementById('item-name').value = matchedLocalItem ? matchedLocalItem.name : "";
+            lastScannedBarcode = decodedText;
+            clearTimeout(scanThrottleTimeout);
+            scanThrottleTimeout = setTimeout(() => { lastScannedBarcode = ""; }, 3000);
 
-            // Show manual input pane
-            document.getElementById('action-box').classList.remove('hidden');
-        }
+            // Audio-visual confirmation alerts directly onto screen button canvas layout
+            const scanBtn = document.getElementById('scan-btn');
+            const originalColor = scanBtn.style.backgroundColor;
+            scanBtn.innerText = `⚡ Auto-Transmitting: ${decodedText}`;
+            scanBtn.style.backgroundColor = "#28a745";
 
-        function onScanFailure(error) { /* Loop filter silencing */ }
+            // Local lookup to check if a specific structural name template has been initialized
+            const knownMatch = inventoryItems.find(i => i.barcode === decodedText);
+            const itemName = knownMatch ? knownMatch.name : `Barcode item ${decodedText}`;
 
-        // --- LOCAL STORAGE WRITERS ---
-        function saveScannedItem(targetList) {
-            const nameInput = document.getElementById('item-name').value.trim();
-            const finalName = nameInput || `Barcode item ${currentScannedBarcode}`;
-
-            const barcodeExists = inventoryItems.some(item => item.barcode === currentScannedBarcode);
-
-            const itemPayload = {
-                id: Date.now().toString(),
-                barcode: currentScannedBarcode,
-                name: finalName,
-                timestamp: new Date().toLocaleString()
+            // Build payloads tracking data matches
+            const purchasePayload = { barcode: decodedText, name: itemName };
+            const scanPayload = { 
+                barcode: decodedText, 
+                camera: currentCamera === 'environment' ? 'back' : 'front',
+                device: navigator.userAgent
             };
 
-            if (targetList === 'inventory') {
-                if (!barcodeExists) {
-                    inventoryItems.unshift(itemPayload);
-                } else {
-                    inventoryItems = inventoryItems.map(item => 
-                        item.barcode === currentScannedBarcode ? { ...item, name: finalName } : item
-                    );
-                }
-                localStorage.setItem('inventoryItems', JSON.stringify(inventoryItems));
-            } else if (targetList === 'purchased') {
-                purchasedLog.unshift(itemPayload);
-                localStorage.setItem('purchasedLog', JSON.stringify(purchasedLog));
+            try {
+                // 1. Post to Scans route endpoint
+                await fetch(`${API_BASE}/api/scans`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(scanPayload)
+                });
 
-                if (!barcodeExists) {
-                    inventoryItems.unshift({
-                        id: 'inv_' + Date.now().toString(),
-                        barcode: currentScannedBarcode,
-                        name: finalName,
-                        timestamp: new Date().toLocaleString()
-                    });
-                    localStorage.setItem('inventoryItems', JSON.stringify(inventoryItems));
+                // 2. Post to Purchases route endpoint 
+                const purResponse = await fetch(`${API_BASE}/api/purchases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(purchasePayload)
+                });
+
+                if (purResponse.ok) {
+                    console.log(`[AUTO-TRANSMIT] Successfully processed item: ${decodedText}`);
+                    // Pull updated definitions instantly from memory tables
+                    await loadDataFromBackend();
                 }
+            } catch (err) {
+                console.error("Background asynchronous request transmission crash: ", err);
+                scanBtn.innerText = "🚨 Transmission Connection Error!";
+                scanBtn.style.backgroundColor = "#dc3545";
+            } finally {
+                // Reset display styles back gracefully without breaking stream channel tracking loops
+                setTimeout(() => {
+                    if (scannerRunning && scanBtn) {
+                        scanBtn.innerText = "Stop Scanner Process";
+                        scanBtn.style.backgroundColor = "#6c757d";
+                    }
+                }, 1500);
             }
-
-            document.getElementById('action-box').classList.add('hidden');
-            currentScannedBarcode = "";
-            document.getElementById('item-name').value = "";
-            
-            renderLists();
         }
 
+        function onScanFailure(error) { /* Inline loop noise capture bypass */ }
+
         // --- QUICK SELECT DIRECT ROUTER ---
-        function purchaseFromSelect() {
+        async function purchaseFromSelect() {
             const selectEl = document.getElementById('quick-inventory-select');
             const selectedId = selectEl.value;
             if (!selectedId) return;
 
             const baseTemplate = inventoryItems.find(item => item.id === selectedId);
-            if (baseTemplate) {
-                const logEntry = {
-                    id: Date.now().toString(),
-                    barcode: baseTemplate.barcode,
-                    name: baseTemplate.name,
-                    timestamp: new Date().toLocaleString()
-                };
-                
-                purchasedLog.unshift(logEntry);
-                localStorage.setItem('purchasedLog', JSON.stringify(purchasedLog));
-                renderLists();
+            if (!baseTemplate) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/purchases`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ barcode: baseTemplate.barcode, name: baseTemplate.name })
+                });
+
+                if (response.ok) {
+                    await loadDataFromBackend();
+                }
+            } catch (err) {
+                console.error("Manual selection request logging failure: ", err);
             }
         }
 
-        // --- REMOVAL UTILITIES ---
-        function deleteItem(id, listType) {
-            if (listType === 'inventory') {
-                inventoryItems = inventoryItems.filter(item => item.id !== id);
-                localStorage.setItem('inventoryItems', JSON.stringify(inventoryItems));
-            } else {
-                purchasedLog = purchasedLog.filter(item => item.id !== id);
-                localStorage.setItem('purchasedLog', JSON.stringify(purchasedLog));
+        // --- BACKEND DELETION COMMAND HANDLERS ---
+        async function deleteItem(id, listType) {
+            const endpoint = listType === 'inventory' ? `/api/inventory/${id}` : `/api/purchases/${id}`;
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, { method: 'DELETE' });
+                if (response.ok) {
+                    await loadDataFromBackend();
+                }
+            } catch (err) {
+                console.error("Record target erasure crash: ", err);
             }
-            renderLists();
         }
 
-        // --- UI FILTER AND RENDER ENGINE ---
+        // --- ASYNC RUNTIME RENDERING ---
         function renderLists() {
             const searchQuery = document.getElementById('search-input').value.toLowerCase();
             
@@ -743,13 +779,14 @@
             const purchasedUI = document.getElementById('purchased-ui-list');
             const selectUI = document.getElementById('quick-inventory-select');
 
+            // 1. Process Master Inventory List
             inventoryUI.innerHTML = "";
             const filteredInventory = inventoryItems.filter(item => 
                 item.name.toLowerCase().includes(searchQuery) || item.barcode.includes(searchQuery)
             );
 
             if (filteredInventory.length === 0) {
-                inventoryUI.innerHTML = `<li style="color:#888; font-size:0.9rem; padding: 5px;">No items match criteria.</li>`;
+                inventoryUI.innerHTML = `<li style="color:#888; font-size:0.9rem; padding: 5px;">No inventory definitions loaded.</li>`;
             } else {
                 filteredInventory.forEach(item => {
                     inventoryUI.innerHTML += `
@@ -763,32 +800,38 @@
                 });
             }
 
+            // 2. Process Purchase History Logs
             purchasedUI.innerHTML = "";
             const filteredPurchases = purchasedLog.filter(item => 
                 item.name.toLowerCase().includes(searchQuery) || item.barcode.includes(searchQuery)
             );
 
             if (filteredPurchases.length === 0) {
-                purchasedUI.innerHTML = `<li style="color:#888; font-size:0.9rem; padding: 5px;">No matching records found.</li>`;
+                purchasedUI.innerHTML = `<li style="color:#888; font-size:0.9rem; padding: 5px;">No tracking items found inside current db stack.</li>`;
             } else {
                 filteredPurchases.forEach(item => {
+                    const timeString = new Date(item.loggedAt).toLocaleTimeString();
                     purchasedUI.innerHTML += `
                         <li class="item-card" style="border-left: 4px solid #6f42c1;">
                             <div>
                                 <strong>${item.name}</strong><br>
-                                <span style="font-size:0.75rem; color:#888;">Logged: ${item.timestamp}</span>
+                                <span style="font-size:0.75rem; color:#888;">Logged Instance: ${timeString} | Code: ${item.barcode}</span>
                             </div>
                             <button class="danger" onclick="deleteItem('${item.id}', 'purchased')">Delete</button>
                         </li>`;
                 });
             }
 
+            // 3. Re-hydrate Manual Form Selection Menu
+            const selectedVal = selectUI.value;
             selectUI.innerHTML = inventoryItems.length === 0 
                 ? `<option value="">-- No registered inventory items --</option>`
                 : inventoryItems.map(item => `<option value="${item.id}">${item.name} (${item.barcode})</option>`).join('');
+            if (selectedVal) selectUI.value = selectedVal;
         }
 
-        document.addEventListener("DOMContentLoaded", renderLists);
+        // Initialize display configuration on DOM layout assembly completion
+        document.addEventListener("DOMContentLoaded", loadDataFromBackend);
     </script>
 </body>
 </html>
